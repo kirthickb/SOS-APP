@@ -1,0 +1,44 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "backend:dev",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				"Set-Location \"D:\\VS CODE PROJECTS\\Bored_projects\\SOS-APP\\sos-backend\"; if (Test-Path .\\mvnw.cmd) { .\\mvnw.cmd spring-boot:run -Dspring-boot.run.jvmArguments=\"-Dspring.devtools.restart.trigger-file=.restart\" } else { mvn spring-boot:run -Dspring-boot.run.jvmArguments=\"-Dspring.devtools.restart.trigger-file=.restart\" }"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "backend:dev",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"cd /d \"D:\\VS CODE PROJECTS\\Bored_projects\\SOS-APP\\sos-backend\" && if exist mvnw.cmd ( mvnw.cmd spring-boot:run -Dspring-boot.run.jvmArguments=\"-Dspring.devtools.restart.trigger-file=.restart\" ) else ( mvn spring-boot:run -Dspring-boot.run.jvmArguments=\"-Dspring.devtools.restart.trigger-file=.restart\" )"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "backend:dev-cmd",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"cd /d \"D:\\VS CODE PROJECTS\\Bored_projects\\SOS-APP\\sos-backend\" && if exist mvnw.cmd ( mvnw.cmd spring-boot:run -Dspring-boot.run.jvmArguments=\"-Dspring.devtools.restart.trigger-file=.restart\" ) else ( mvn spring-boot:run -Dspring-boot.run.jvmArguments=\"-Dspring.devtools.restart.trigger-file=.restart\" )"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}
