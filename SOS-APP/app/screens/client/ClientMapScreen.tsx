@@ -7,7 +7,7 @@ import {
   Alert,
   TouchableOpacity,
 } from "react-native";
-import MapView, { Marker, Polyline, UrlTile } from "react-native-maps";
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import { RouteProp, useRoute } from "@react-navigation/native";
 import * as Location from "expo-location";
 import { ClientStackParamList } from "../../navigation/AppNavigator";
@@ -121,7 +121,10 @@ const ClientMapScreen: React.FC = () => {
         setCurrentLocation(location);
         return location;
       } catch (highAccuracyError) {
-        console.warn("⚠️ High accuracy failed, trying balanced accuracy...", highAccuracyError);
+        console.warn(
+          "⚠️ High accuracy failed, trying balanced accuracy...",
+          highAccuracyError
+        );
 
         // Fallback to balanced accuracy
         try {
@@ -132,14 +135,20 @@ const ClientMapScreen: React.FC = () => {
               mayShowUserSettingsDialog: true,
             }),
             new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error("Balanced accuracy timeout")), 10000)
+              setTimeout(
+                () => reject(new Error("Balanced accuracy timeout")),
+                10000
+              )
             ),
           ]);
           console.log("✅ Got balanced accuracy location:", location.coords);
           setCurrentLocation(location);
           return location;
         } catch (balancedError) {
-          console.warn("⚠️ Balanced accuracy failed, trying lowest accuracy...", balancedError);
+          console.warn(
+            "⚠️ Balanced accuracy failed, trying lowest accuracy...",
+            balancedError
+          );
 
           // Last resort: lowest accuracy (network-based)
           try {
@@ -150,7 +159,10 @@ const ClientMapScreen: React.FC = () => {
                 mayShowUserSettingsDialog: true,
               }),
               new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error("Lowest accuracy timeout")), 8000)
+                setTimeout(
+                  () => reject(new Error("Lowest accuracy timeout")),
+                  8000
+                )
               ),
             ]);
             console.log("✅ Got lowest accuracy location:", location.coords);
@@ -226,8 +238,33 @@ const ClientMapScreen: React.FC = () => {
   const subscribeToDriverUpdates = () => {
     socketUnsubscribeRef.current = socketService.subscribeToSOS((sos) => {
       if (sos.id === sosId) {
-        console.log("📍 SOS Update received:", sos);
+        console.log("📍 [ClientMap] SOS Update received:", sos);
         setSosData(sos);
+
+        // Handle status-based alerts - CRITICAL: ARRIVED means driver picked up patient
+        if (sos.status === "ARRIVED") {
+          Alert.alert(
+            "🚑 Ambulance Arrived!",
+            "The ambulance has arrived and picked up the patient.",
+            [{ text: "OK" }]
+          );
+        } else if (sos.status === "COMPLETED") {
+          Alert.alert(
+            "✅ Emergency Completed",
+            "Your emergency has been successfully handled. Stay safe!",
+            [
+              {
+                text: "OK",
+                onPress: () => {
+                  // Unsubscribe from socket updates
+                  if (socketUnsubscribeRef.current) {
+                    socketUnsubscribeRef.current();
+                  }
+                },
+              },
+            ]
+          );
+        }
 
         // Set client location from SOS data if not already set
         if (!currentLocation) {
@@ -358,6 +395,7 @@ const ClientMapScreen: React.FC = () => {
     <View style={styles.container}>
       <MapView
         ref={mapViewRef}
+        provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={initialRegion}
         showsUserLocation={locationPermissionGranted}
@@ -371,13 +409,6 @@ const ClientMapScreen: React.FC = () => {
         pitchEnabled={true}
         rotateEnabled={true}
       >
-        {/* OpenStreetMap Tiles (free, no API key needed) */}
-        <UrlTile
-          urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-          maximumZ={19}
-          flipY={false}
-        />
-
         {/* Client Marker */}
         <Marker
           coordinate={clientCoords}
@@ -435,9 +466,30 @@ const ClientMapScreen: React.FC = () => {
 
       {/* Info Card */}
       <View style={styles.infoCard}>
-        <Text style={styles.infoTitle}>🚨 SOS Alert Active</Text>
+        <Text style={styles.infoTitle}>
+          {sosData?.status === "COMPLETED"
+            ? "✅ Emergency Completed"
+            : sosData?.status === "ACCEPTED"
+            ? "🚑 Ambulance En Route!"
+            : "🚨 SOS Alert Active"}
+        </Text>
 
-        {!driverLocation ? (
+        {sosData?.status === "COMPLETED" ? (
+          <Text style={styles.infoText}>
+            Your emergency has been successfully handled. Stay safe!
+          </Text>
+        ) : sosData?.status === "ACCEPTED" ? (
+          <>
+            <Text style={styles.infoText}>
+              <Text style={styles.boldText}>
+                The ambulance is on the way to your location
+              </Text>
+            </Text>
+            <Text style={styles.infoText}>
+              Driver: {sosData?.acceptedDriverName || "Unknown"}
+            </Text>
+          </>
+        ) : !driverLocation ? (
           <>
             <Text style={styles.infoText}>
               Searching for nearby ambulances...
@@ -449,7 +501,7 @@ const ClientMapScreen: React.FC = () => {
         ) : (
           <>
             <Text style={styles.infoText}>
-              <Text style={styles.boldText}>Ambulance Accepted</Text>
+              <Text style={styles.boldText}>Ambulance En Route</Text>
             </Text>
             <Text style={styles.infoText}>
               Driver: {sosData?.acceptedDriverName || "En route"}

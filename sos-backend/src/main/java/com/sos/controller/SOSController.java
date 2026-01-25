@@ -30,9 +30,24 @@ public class SOSController {
     ) {
         return ResponseEntity.ok(sosService.getNearbySOS(lat, lng, radius));
     }
-
+    
     @PostMapping("/{id}/accept")
     public ResponseEntity<SOSResponse> acceptSOS(@PathVariable Long id) {
         return ResponseEntity.ok(sosService.acceptSOS(id));
+    }
+
+    @PostMapping("/{id}/arrived")
+    public ResponseEntity<SOSResponse> markPatientArrived(@PathVariable Long id) {
+        return ResponseEntity.ok(sosService.markPatientArrived(id));
+    }
+
+    @PostMapping("/{id}/complete")
+    public ResponseEntity<SOSResponse> completeSOS(@PathVariable Long id) {
+        return ResponseEntity.ok(sosService.completeSOS(id));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<SOSResponse> getSOS(@PathVariable Long id) {
+        return ResponseEntity.ok(sosService.getSOS(id));
     }
 }

@@ -4,6 +4,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "./app/context/AuthContext";
 import { SocketProvider } from "./app/context/SocketContext";
+import { SOSProvider } from "./app/context/SOSContext";
 import AuthNavigator from "./app/navigation/AuthNavigator";
 import AppNavigator from "./app/navigation/AppNavigator";
 import { ActivityIndicator, View, StyleSheet } from "react-native";
@@ -31,8 +32,10 @@ export default function App() {
     <SafeAreaProvider>
       <AuthProvider>
         <SocketProvider>
-          <AppContent />
-          <StatusBar style="auto" />
+          <SOSProvider>
+            <AppContent />
+            <StatusBar style="auto" />
+          </SOSProvider>
         </SocketProvider>
       </AuthProvider>
     </SafeAreaProvider>

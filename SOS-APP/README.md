@@ -52,10 +52,10 @@ A production-ready React Native (Expo + TypeScript) mobile application for emerg
 
    ```typescript
    // For Android Emulator (default)
-   const BASE_URL = "http://10.0.2.2:8080/api";
+   const BASE_URL = "http://10.201.132.18:8080/api";
 
    // For iOS Simulator
-   const BASE_URL = "http://localhost:8080/api";
+   const BASE_URL = "http://10.201.132.18:8080/api";
 
    // For Physical Device (replace with your computer's IP)
    const BASE_URL = "http://192.168.1.X:8080/api";
@@ -64,7 +64,7 @@ A production-ready React Native (Expo + TypeScript) mobile application for emerg
    Similarly update `src/services/socket.ts`:
 
    ```typescript
-   const SOCKET_URL = "http://10.0.2.2:8080/ws";
+   const SOCKET_URL = "http://10.201.132.18:8080/ws";
    ```
 
 3. **Start the development server**:
@@ -166,8 +166,8 @@ Real-time SOS alerts powered by STOMP over SockJS connecting to backend at `/ws`
 
 ### Cannot connect to backend
 
-- Android Emulator: Use `http://10.0.2.2:8080`
-- iOS Simulator: Use `http://localhost:8080`
+- Android Emulator: Use `http://10.201.132.18:8080`
+- iOS Simulator: Use `http://10.201.132.18:8080`
 - Physical Device: Use your computer's local IP address
 
 ### Location permission denied

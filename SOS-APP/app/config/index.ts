@@ -3,19 +3,22 @@
 export const API_CONFIG = {
   // Backend API Base URL
   // Change this based on your environment:
-  // - Android Emulator: 'http://localhost:8080/api'
-  // - iOS Simulator: 'http://localhost:8080/api'
+  // - Android Emulator: 'http://10.201.132.18:8080/api'
+  // - iOS Simulator: 'http://10.201.132.18:8080/api'
   // - Physical Device: 'http://YOUR_COMPUTER_IP:8080/api'
-  BASE_URL: "http://localhost:8080/api",
+  BASE_URL: "http://10.201.132.18:8080/api",
 
   // WebSocket URL
-  SOCKET_URL: "http://localhost:8080/ws",
+  SOCKET_URL: "http://10.201.132.18:8080/ws",
 
   // Timeout for API requests (milliseconds)
   TIMEOUT: 10000,
 };
 
 export const MAP_CONFIG = {
+  // Google Maps API Key
+  GOOGLE_MAPS_API_KEY: "AIzaSyAlM6ydnd7-cE7Y9YSqLoF7G4iHWk0Sl8k",
+
   // OpenStreetMap tile URL (no API key needed)
   OSM_TILE_URL: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
 

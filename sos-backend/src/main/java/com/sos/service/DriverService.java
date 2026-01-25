@@ -86,13 +86,16 @@ public class DriverService {
     }
 
     private void broadcastDriverLocationUpdate(User driver, Double latitude, Double longitude) {
-        // Find all accepted SOS requests for this driver
-        List<SOSRequest> acceptedRequests = sosRequestRepository.findByAcceptedDriverAndStatus(
-                driver, SOSStatus.ACCEPTED
+        // Find all active SOS requests for this driver (ACCEPTED or ARRIVED)
+        // Client needs real-time location during both states
+        List<SOSRequest> activeRequests = sosRequestRepository.findByAcceptedDriverAndStatusIn(
+                driver, List.of(SOSStatus.ACCEPTED, SOSStatus.ARRIVED)
         );
 
-        // Broadcast updated location for each SOS request
-        for (SOSRequest sosRequest : acceptedRequests) {
+        System.out.println("📍 Broadcasting driver location update for " + activeRequests.size() + " active SOS requests");
+
+        // Broadcast updated location for each active SOS request
+        for (SOSRequest sosRequest : activeRequests) {
             SOSResponse response = SOSResponse.builder()
                     .id(sosRequest.getId())
                     .clientName(sosRequest.getClient().getName())
@@ -107,7 +110,9 @@ public class DriverService {
                     .createdAt(sosRequest.getCreatedAt())
                     .build();
 
+            System.out.println("📡 Broadcasting location for SOS #" + sosRequest.getId() + " (status: " + sosRequest.getStatus() + ")");
             messagingTemplate.convertAndSend("/topic/sos", response);
+            messagingTemplate.convertAndSend("/user/" + sosRequest.getClient().getId() + "/topic/sos", response);
         }
     }
 

@@ -6,6 +6,7 @@ export enum UserRole {
 export enum SOSStatus {
   PENDING = "PENDING",
   ACCEPTED = "ACCEPTED",
+  ARRIVED = "ARRIVED", // Driver picked up patient
   COMPLETED = "COMPLETED",
   CANCELLED = "CANCELLED",
 }

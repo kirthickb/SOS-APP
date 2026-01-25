@@ -14,6 +14,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -95,8 +96,89 @@ public class SOSService {
         
         // Broadcast the updated SOS with driver info via WebSocket
         messagingTemplate.convertAndSend("/topic/sos", response);
+        messagingTemplate.convertAndSend("/user/" + sosRequest.getClient().getId() + "/topic/sos", response);
 
         return response;
+    }
+
+    @Transactional
+    public SOSResponse markPatientArrived(Long sosId) {
+        User driver = getCurrentUser();
+
+        if (driver.getRole() != UserRole.DRIVER) {
+            throw new RuntimeException("Only drivers can update SOS status");
+        }
+
+        SOSRequest sosRequest = sosRequestRepository.findById(sosId)
+                .orElseThrow(() -> new RuntimeException("SOS request not found"));
+
+        System.out.println("📍 Current SOS status: " + sosRequest.getStatus());
+        
+        if (sosRequest.getStatus() != SOSStatus.ACCEPTED) {
+            throw new RuntimeException("Cannot mark arrived - SOS not in accepted state. Current status: " + sosRequest.getStatus());
+        }
+
+        if (!sosRequest.getAcceptedDriver().getId().equals(driver.getId())) {
+            throw new RuntimeException("Only the assigned driver can update this SOS");
+        }
+        
+        sosRequest.setStatus(SOSStatus.ARRIVED);
+        sosRequest.setArrivedAt(LocalDateTime.now());
+        sosRequest = sosRequestRepository.save(sosRequest);
+        
+        System.out.println("✅ SOS status updated to ARRIVED for ID: " + sosId);
+
+        SOSResponse response = mapToResponse(sosRequest);
+        
+        // Broadcast status update to all subscribers
+        System.out.println("📡 Broadcasting ARRIVED status to WebSocket clients");
+        messagingTemplate.convertAndSend("/topic/sos", response);
+        messagingTemplate.convertAndSend("/user/" + sosRequest.getClient().getId() + "/topic/sos", response);
+
+        return response;
+    }
+
+    @Transactional
+    public SOSResponse completeSOS(Long sosId) {
+        User driver = getCurrentUser();
+
+        if (driver.getRole() != UserRole.DRIVER) {
+            throw new RuntimeException("Only drivers can complete SOS");
+        }
+
+        SOSRequest sosRequest = sosRequestRepository.findById(sosId)
+                .orElseThrow(() -> new RuntimeException("SOS request not found"));
+
+        System.out.println("🏁 Current SOS status: " + sosRequest.getStatus());
+        
+        if (sosRequest.getStatus() != SOSStatus.ARRIVED) {
+            throw new RuntimeException("Cannot complete - patient must be picked up first (ARRIVED status required). Current status: " + sosRequest.getStatus());
+        }
+
+        if (!sosRequest.getAcceptedDriver().getId().equals(driver.getId())) {
+            throw new RuntimeException("Only the assigned driver can complete this SOS");
+        }
+
+        sosRequest.setStatus(SOSStatus.COMPLETED);
+        sosRequest.setCompletedAt(LocalDateTime.now());
+        sosRequest = sosRequestRepository.save(sosRequest);
+        
+        System.out.println("✅ SOS status updated to COMPLETED for ID: " + sosId);
+
+        SOSResponse response = mapToResponse(sosRequest);
+        
+        // Broadcast completion to all interested parties
+        System.out.println("📡 Broadcasting COMPLETED status to WebSocket clients");
+        messagingTemplate.convertAndSend("/topic/sos", response);
+        messagingTemplate.convertAndSend("/user/" + sosRequest.getClient().getId() + "/topic/sos", response);
+
+        return response;
+    }
+
+    public SOSResponse getSOS(Long sosId) {
+        SOSRequest sosRequest = sosRequestRepository.findById(sosId)
+                .orElseThrow(() -> new RuntimeException("SOS request not found"));
+        return mapToResponse(sosRequest);
     }
     
     private SOSResponse mapToResponse(SOSRequest request) {

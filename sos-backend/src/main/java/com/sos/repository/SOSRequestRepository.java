@@ -25,4 +25,7 @@ public interface SOSRequestRepository extends JpaRepository<SOSRequest, Long> {
     );
 
     List<SOSRequest> findByAcceptedDriverAndStatus(User acceptedDriver, SOSStatus status);
+    
+    // Find SOS requests by driver with multiple statuses (for real-time location tracking)
+    List<SOSRequest> findByAcceptedDriverAndStatusIn(User acceptedDriver, List<SOSStatus> statuses);
 }

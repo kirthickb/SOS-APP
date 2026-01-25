@@ -10,6 +10,8 @@
 
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.nishanth21.sosapp",
+      "googleMapsApiKey": "AIzaSyAlM6ydnd7-cE7Y9YSqLoF7G4iHWk0Sl8k",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app needs access to your location to send emergency SOS alerts with your current coordinates.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to your location to track ambulance and provide real-time navigation."
@@ -18,6 +20,7 @@
 
     "android": {
       "package": "com.nishanth21.sosapp",
+      "googleMapsApiKey": "AIzaSyAlM6ydnd7-cE7Y9YSqLoF7G4iHWk0Sl8k",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [

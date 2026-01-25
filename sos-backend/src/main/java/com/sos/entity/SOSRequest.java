@@ -37,6 +37,12 @@ public class SOSRequest {
     @JoinColumn(name = "accepted_driver_id")
     private User acceptedDriver;
 
+    @Column
+    private LocalDateTime arrivedAt; // When driver arrived at patient location
+
+    @Column
+    private LocalDateTime completedAt; // When emergency was completed
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;

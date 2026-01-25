@@ -171,6 +171,27 @@ class ApiService {
     const response = await this.api.post<SOSResponse>(`/sos/${sosId}/accept`);
     return response.data;
   }
+
+  async getSOS(sosId: number): Promise<SOSResponse> {
+    const response = await this.api.get<SOSResponse>(`/sos/${sosId}`);
+    return response.data;
+  }
+
+  async markPatientArrived(sosId: number): Promise<SOSResponse> {
+    console.log(
+      `📍 [API] POST /sos/${sosId}/arrived - Marking patient as arrived`
+    );
+    const response = await this.api.post<SOSResponse>(`/sos/${sosId}/arrived`);
+    console.log(`✅ [API] Patient arrived response:`, response.data);
+    return response.data;
+  }
+
+  async completeSOS(sosId: number): Promise<SOSResponse> {
+    console.log(`🏁 [API] POST /sos/${sosId}/complete - Completing SOS`);
+    const response = await this.api.post<SOSResponse>(`/sos/${sosId}/complete`);
+    console.log(`✅ [API] SOS completed response:`, response.data);
+    return response.data;
+  }
 }
 
 export default new ApiService();

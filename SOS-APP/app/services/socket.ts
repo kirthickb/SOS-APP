@@ -3,7 +3,7 @@ import SockJS from "sockjs-client";
 import { SOSResponse } from "../types";
 
 // IMPORTANT: Replace with your actual backend URL
-const WS_URL = "http://localhost:8080/ws";
+const WS_URL = "http://10.201.132.18:8080/ws";
 
 export type SOSCallback = (sos: SOSResponse) => void;
 
