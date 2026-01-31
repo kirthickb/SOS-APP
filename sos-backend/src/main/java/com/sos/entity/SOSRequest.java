@@ -43,6 +43,9 @@ public class SOSRequest {
     @Column
     private LocalDateTime completedAt; // When emergency was completed
 
+    @Column
+    private LocalDateTime cancelledAt; // When client cancelled the request
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;

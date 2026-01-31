@@ -6,9 +6,12 @@ import com.sos.entity.SOSRequest;
 import com.sos.entity.SOSStatus;
 import com.sos.entity.User;
 import com.sos.entity.UserRole;
+import com.sos.exception.ResourceNotFoundException;
+import com.sos.exception.UnauthorizedException;
 import com.sos.repository.SOSRequestRepository;
 import com.sos.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -18,6 +21,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SOSService {
@@ -29,7 +33,7 @@ public class SOSService {
     private User getCurrentUser() {
         String phone = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByPhone(phone)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User", "phone", phone));
     }
 
     @Transactional
@@ -37,7 +41,8 @@ public class SOSService {
         User client = getCurrentUser();
 
         if (client.getRole() != UserRole.CLIENT) {
-            throw new RuntimeException("Only clients can create SOS requests");
+            log.warn("Non-client user attempted to create SOS: {}", client.getPhone());
+            throw new UnauthorizedException("Only clients can create SOS requests");
         }
 
         SOSRequest sosRequest = SOSRequest.builder()
@@ -48,10 +53,13 @@ public class SOSService {
                 .build();
 
         sosRequest = sosRequestRepository.save(sosRequest);
+        
+        log.info("SOS request created: id={}, client={}, lat={}, lng={}", 
+                sosRequest.getId(), client.getPhone(), request.getLatitude(), request.getLongitude());
 
         SOSResponse response = mapToResponse(sosRequest);
 
-        // Broadcast to all drivers via WebSocket
+        // Broadcast to all drivers via WebSocket (only PENDING SOS)
         messagingTemplate.convertAndSend("/topic/sos", response);
 
         return response;
@@ -61,13 +69,16 @@ public class SOSService {
         User driver = getCurrentUser();
 
         if (driver.getRole() != UserRole.DRIVER) {
-            throw new RuntimeException("Only drivers can view nearby SOS requests");
+            log.warn("Non-driver user attempted to view nearby SOS: {}", driver.getPhone());
+            throw new UnauthorizedException("Only drivers can view nearby SOS requests");
         }
 
         List<SOSRequest> sosRequests = sosRequestRepository.findNearbySOS(
                 latitude, longitude, radius, SOSStatus.PENDING
         );
 
+        log.debug("Found {} nearby SOS requests for driver: {}", sosRequests.size(), driver.getPhone());
+        
         return sosRequests.stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -78,23 +89,30 @@ public class SOSService {
         User driver = getCurrentUser();
 
         if (driver.getRole() != UserRole.DRIVER) {
-            throw new RuntimeException("Only drivers can accept SOS requests");
+            log.warn("Non-driver user attempted to accept SOS: {}", driver.getPhone());
+            throw new UnauthorizedException("Only drivers can accept SOS requests");
         }
 
         SOSRequest sosRequest = sosRequestRepository.findById(sosId)
-                .orElseThrow(() -> new RuntimeException("SOS request not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("SOS", "id", sosId));
 
         if (sosRequest.getStatus() != SOSStatus.PENDING) {
-            throw new RuntimeException("SOS request already accepted or completed");
+            log.warn("Driver {} attempted to accept non-PENDING SOS {}: current status={}", 
+                    driver.getPhone(), sosId, sosRequest.getStatus());
+            throw new IllegalArgumentException(
+                "SOS request already accepted or completed. Current status: " + sosRequest.getStatus()
+            );
         }
 
         sosRequest.setStatus(SOSStatus.ACCEPTED);
         sosRequest.setAcceptedDriver(driver);
         sosRequest = sosRequestRepository.save(sosRequest);
+        
+        log.info("SOS {} accepted by driver: {}", sosId, driver.getPhone());
 
         SOSResponse response = mapToResponse(sosRequest);
         
-        // Broadcast the updated SOS with driver info via WebSocket
+        // Notify all interested parties
         messagingTemplate.convertAndSend("/topic/sos", response);
         messagingTemplate.convertAndSend("/user/" + sosRequest.getClient().getId() + "/topic/sos", response);
 
@@ -106,32 +124,33 @@ public class SOSService {
         User driver = getCurrentUser();
 
         if (driver.getRole() != UserRole.DRIVER) {
-            throw new RuntimeException("Only drivers can update SOS status");
+            log.warn("Non-driver user attempted to mark arrived: {}", driver.getPhone());
+            throw new UnauthorizedException("Only drivers can update SOS status");
         }
 
         SOSRequest sosRequest = sosRequestRepository.findById(sosId)
-                .orElseThrow(() -> new RuntimeException("SOS request not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("SOS", "id", sosId));
 
-        System.out.println("📍 Current SOS status: " + sosRequest.getStatus());
+        // Verify this is the assigned driver
+        if (sosRequest.getAcceptedDriver() == null || !sosRequest.getAcceptedDriver().getId().equals(driver.getId())) {
+            log.warn("Driver {} attempted to update SOS {} assigned to another driver", driver.getPhone(), sosId);
+            throw new UnauthorizedException("Only the assigned driver can update this SOS");
+        }
         
         if (sosRequest.getStatus() != SOSStatus.ACCEPTED) {
-            throw new RuntimeException("Cannot mark arrived - SOS not in accepted state. Current status: " + sosRequest.getStatus());
+            log.warn("Cannot mark ARRIVED - SOS {} not in ACCEPTED state. Current: {}", sosId, sosRequest.getStatus());
+            throw new IllegalArgumentException(
+                "Cannot mark arrived - SOS not in accepted state. Current status: " + sosRequest.getStatus()
+            );
         }
 
-        if (!sosRequest.getAcceptedDriver().getId().equals(driver.getId())) {
-            throw new RuntimeException("Only the assigned driver can update this SOS");
-        }
-        
         sosRequest.setStatus(SOSStatus.ARRIVED);
         sosRequest.setArrivedAt(LocalDateTime.now());
         sosRequest = sosRequestRepository.save(sosRequest);
         
-        System.out.println("✅ SOS status updated to ARRIVED for ID: " + sosId);
+        log.info("SOS {} marked as ARRIVED by driver: {}", sosId, driver.getPhone());
 
         SOSResponse response = mapToResponse(sosRequest);
-        
-        // Broadcast status update to all subscribers
-        System.out.println("📡 Broadcasting ARRIVED status to WebSocket clients");
         messagingTemplate.convertAndSend("/topic/sos", response);
         messagingTemplate.convertAndSend("/user/" + sosRequest.getClient().getId() + "/topic/sos", response);
 
@@ -143,41 +162,99 @@ public class SOSService {
         User driver = getCurrentUser();
 
         if (driver.getRole() != UserRole.DRIVER) {
-            throw new RuntimeException("Only drivers can complete SOS");
+            log.warn("Non-driver user attempted to complete SOS: {}", driver.getPhone());
+            throw new UnauthorizedException("Only drivers can complete SOS");
         }
 
         SOSRequest sosRequest = sosRequestRepository.findById(sosId)
-                .orElseThrow(() -> new RuntimeException("SOS request not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("SOS", "id", sosId));
 
-        System.out.println("🏁 Current SOS status: " + sosRequest.getStatus());
+        // Verify this is the assigned driver
+        if (sosRequest.getAcceptedDriver() == null || !sosRequest.getAcceptedDriver().getId().equals(driver.getId())) {
+            log.warn("Driver {} attempted to complete SOS {} assigned to another driver", driver.getPhone(), sosId);
+            throw new UnauthorizedException("Only the assigned driver can complete this SOS");
+        }
         
         if (sosRequest.getStatus() != SOSStatus.ARRIVED) {
-            throw new RuntimeException("Cannot complete - patient must be picked up first (ARRIVED status required). Current status: " + sosRequest.getStatus());
-        }
-
-        if (!sosRequest.getAcceptedDriver().getId().equals(driver.getId())) {
-            throw new RuntimeException("Only the assigned driver can complete this SOS");
+            log.warn("Cannot complete SOS {} - patient not picked up. Current: {}", sosId, sosRequest.getStatus());
+            throw new IllegalArgumentException(
+                "Cannot complete - patient must be picked up first (ARRIVED status required). Current status: " + sosRequest.getStatus()
+            );
         }
 
         sosRequest.setStatus(SOSStatus.COMPLETED);
         sosRequest.setCompletedAt(LocalDateTime.now());
         sosRequest = sosRequestRepository.save(sosRequest);
         
-        System.out.println("✅ SOS status updated to COMPLETED for ID: " + sosId);
+        log.info("SOS {} completed by driver: {}", sosId, driver.getPhone());
 
         SOSResponse response = mapToResponse(sosRequest);
-        
-        // Broadcast completion to all interested parties
-        System.out.println("📡 Broadcasting COMPLETED status to WebSocket clients");
         messagingTemplate.convertAndSend("/topic/sos", response);
         messagingTemplate.convertAndSend("/user/" + sosRequest.getClient().getId() + "/topic/sos", response);
 
         return response;
     }
 
-    public SOSResponse getSOS(Long sosId) {
+    @Transactional
+    public SOSResponse cancelSOS(Long sosId) {
+        User client = getCurrentUser();
+
+        if (client.getRole() != UserRole.CLIENT) {
+            log.warn("Non-client user attempted to cancel SOS: {}", client.getPhone());
+            throw new UnauthorizedException("Only clients can cancel SOS requests");
+        }
+
         SOSRequest sosRequest = sosRequestRepository.findById(sosId)
-                .orElseThrow(() -> new RuntimeException("SOS request not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("SOS", "id", sosId));
+
+        // Verify the client owns this SOS
+        if (!sosRequest.getClient().getId().equals(client.getId())) {
+            log.warn("Client {} attempted to cancel SOS {} belonging to client {}", 
+                    client.getPhone(), sosId, sosRequest.getClient().getPhone());
+            throw new UnauthorizedException("You can only cancel your own SOS requests");
+        }
+
+        // Can only cancel if not already completed
+        if (sosRequest.getStatus() == SOSStatus.COMPLETED) {
+            log.warn("Client {} attempted to cancel already completed SOS: {}", client.getPhone(), sosId);
+            throw new IllegalArgumentException("Cannot cancel a completed SOS request");
+        }
+
+        sosRequest.setStatus(SOSStatus.CANCELLED);
+        sosRequest.setCancelledAt(LocalDateTime.now());
+        sosRequest = sosRequestRepository.save(sosRequest);
+        
+        log.info("SOS {} cancelled by client: {}", sosId, client.getPhone());
+
+        SOSResponse response = mapToResponse(sosRequest);
+        
+        // Broadcast cancellation to all drivers so they remove it from their list
+        messagingTemplate.convertAndSend("/topic/sos", response);
+        
+        // Notify assigned driver if one exists
+        if (sosRequest.getAcceptedDriver() != null) {
+            messagingTemplate.convertAndSend(
+                "/user/" + sosRequest.getAcceptedDriver().getId() + "/topic/sos", 
+                response
+            );
+        }
+
+        return response;
+    }
+
+    public SOSResponse getSOS(Long sosId) {
+        User currentUser = getCurrentUser();
+        
+        SOSRequest sosRequest = sosRequestRepository.findById(sosId)
+                .orElseThrow(() -> new ResourceNotFoundException("SOS", "id", sosId));
+        
+        // Authorization check - only client or assigned driver can view
+        if (!sosRequest.getClient().getId().equals(currentUser.getId()) && 
+            (sosRequest.getAcceptedDriver() == null || !sosRequest.getAcceptedDriver().getId().equals(currentUser.getId()))) {
+            log.warn("User {} attempted unauthorized access to SOS {}", currentUser.getPhone(), sosId);
+            throw new UnauthorizedException("You are not authorized to view this SOS request");
+        }
+        
         return mapToResponse(sosRequest);
     }
     

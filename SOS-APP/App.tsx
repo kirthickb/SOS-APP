@@ -8,6 +8,7 @@ import { SOSProvider } from "./app/context/SOSContext";
 import AuthNavigator from "./app/navigation/AuthNavigator";
 import AppNavigator from "./app/navigation/AppNavigator";
 import { ActivityIndicator, View, StyleSheet } from "react-native";
+import { ErrorBoundary } from "./app/components/ErrorBoundary";
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -29,16 +30,18 @@ const AppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <SocketProvider>
-          <SOSProvider>
-            <AppContent />
-            <StatusBar style="auto" />
-          </SOSProvider>
-        </SocketProvider>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <SocketProvider>
+            <SOSProvider>
+              <AppContent />
+              <StatusBar style="auto" />
+            </SOSProvider>
+          </SocketProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }
 

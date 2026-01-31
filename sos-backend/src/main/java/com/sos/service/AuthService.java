@@ -4,15 +4,19 @@ import com.sos.dto.AuthResponse;
 import com.sos.dto.LoginRequest;
 import com.sos.dto.RegisterRequest;
 import com.sos.entity.User;
+import com.sos.exception.UserAlreadyExistsException;
 import com.sos.repository.UserRepository;
 import com.sos.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -24,8 +28,12 @@ public class AuthService {
     
     @Transactional
     public AuthResponse register(RegisterRequest request) {
+        // Check if phone already exists
         if (userRepository.existsByPhone(request.getPhone())) {
-            throw new RuntimeException("Phone number already exists");
+            log.warn("Registration attempt with existing phone: {}", request.getPhone());
+            throw new UserAlreadyExistsException(
+                "Phone number " + request.getPhone() + " is already registered"
+            );
         }
 
         User user = User.builder()
@@ -37,9 +45,10 @@ public class AuthService {
                 .build();
 
         userRepository.save(user);
-
+        
+        log.info("User registered successfully: phone={}", request.getPhone());
+        
         String token = jwtUtil.generateToken(user.getPhone());
-        System.out.println("Generated Token: " + token);
         
         return AuthResponse.builder()
                 .token(token)
@@ -48,16 +57,23 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        request.getPhone(),
-                        request.getPassword()
-                )
-        );
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            request.getPhone(),
+                            request.getPassword()
+                    )
+            );
+        } catch (BadCredentialsException e) {
+            log.warn("Failed login attempt: phone={}", request.getPhone());
+            throw new BadCredentialsException("Invalid phone number or password", e);
+        }
 
         User user = userRepository.findByPhone(request.getPhone())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new BadCredentialsException("User not found"));
 
+        log.info("User login successful: phone={}", request.getPhone());
+        
         String token = jwtUtil.generateToken(user.getPhone());
 
         return AuthResponse.builder()

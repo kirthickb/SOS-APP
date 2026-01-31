@@ -31,7 +31,11 @@ const DriverHomeScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const { logout } = useAuth();
   const { subscribeToSOS, isConnected } = useSocket();
-  const { acceptSOS: acceptSOSContext } = useSOSContext();
+  const {
+    acceptSOS: acceptSOSContext,
+    activeSOS,
+    isSosActive,
+  } = useSOSContext();
 
   const [isOnline, setIsOnline] = useState(false);
   const [sosList, setSosList] = useState<SOSResponse[]>([]);
@@ -260,6 +264,32 @@ const DriverHomeScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
+      {/* ACCEPTED SOS STATUS BANNER */}
+      {isSosActive && activeSOS && (
+        <View style={styles.acceptedSOSBanner}>
+          <View style={styles.acceptedSOSContent}>
+            <Ionicons name="checkmark-circle" size={24} color="#059669" />
+            <View style={styles.acceptedSOSText}>
+              <Text style={styles.acceptedSOSTitle}>✅ SOS ACCEPTED</Text>
+              <Text style={styles.acceptedSOSSubtitle}>
+                Patient: {activeSOS.clientName}
+              </Text>
+              <Text style={styles.acceptedSOSSubtitle}>
+                Status: {activeSOS.status}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            onPress={() =>
+              navigation.navigate("DriverMap", { sosId: activeSOS.id })
+            }
+            style={styles.navigateButton}
+          >
+            <Ionicons name="navigate" size={24} color="#059669" />
+          </TouchableOpacity>
+        </View>
+      )}
+
       <TouchableOpacity
         style={[styles.toggleButton, isOnline && styles.toggleButtonOnline]}
         onPress={toggleOnlineStatus}
@@ -356,6 +386,41 @@ const styles = StyleSheet.create({
     color: "#10B981",
   },
   logoutButton: {
+    padding: 8,
+  },
+  // ACCEPTED SOS BANNER STYLES
+  acceptedSOSBanner: {
+    backgroundColor: "#D1FAE5",
+    borderLeftWidth: 4,
+    borderLeftColor: "#059669",
+    padding: 16,
+    marginHorizontal: 20,
+    marginTop: 16,
+    borderRadius: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  acceptedSOSContent: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  acceptedSOSText: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  acceptedSOSTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#059669",
+  },
+  acceptedSOSSubtitle: {
+    fontSize: 12,
+    color: "#047857",
+    marginTop: 4,
+  },
+  navigateButton: {
     padding: 8,
   },
   toggleButton: {

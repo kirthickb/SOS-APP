@@ -15,9 +15,12 @@ import {
 
 const TOKEN_KEY = "@sos_token";
 const USER_ROLE_KEY = "@sos_user_role";
+const TOKEN_EXPIRY_KEY = "@sos_token_expiry";
 
 class ApiService {
   private api: AxiosInstance;
+  private refreshing = false;
+  private refreshSubscribers: ((token: string) => void)[] = [];
 
   constructor() {
     this.api = axios.create({
@@ -42,15 +45,41 @@ class ApiService {
       }
     );
 
-    // Response interceptor - Handle 401 errors
+    // Response interceptor - Handle 401 errors with retry
     this.api.interceptors.response.use(
       (response) => response,
       async (error) => {
-        if (error.response?.status === 401) {
-          // Token expired or invalid - clear storage
-          await AsyncStorage.removeItem(TOKEN_KEY);
-          // You can emit an event here to trigger logout in AuthContext
+        const { config, response } = error;
+        const originalRequest = config;
+
+        // Handle 401 Unauthorized
+        if (response?.status === 401 && !originalRequest._retry) {
+          originalRequest._retry = true;
+
+          if (!this.refreshing) {
+            this.refreshing = true;
+
+            try {
+              // Try to refresh token (if backend supports it)
+              // For now, clear storage and let user re-login
+              await this.removeToken();
+              await this.removeUserRole();
+
+              // Emit logout event (implement via EventEmitter if needed)
+              if (API_CONFIG.ENABLE_LOGGING) {
+                console.log("Token expired, user logged out");
+              }
+            } catch (refreshError) {
+              console.error("Token refresh failed:", refreshError);
+            } finally {
+              this.refreshing = false;
+              this.refreshSubscribers = [];
+            }
+          }
+
+          return Promise.reject(error);
         }
+
         return Promise.reject(error);
       }
     );
@@ -58,32 +87,71 @@ class ApiService {
 
   // ==================== AUTH APIs ====================
   async register(data: RegisterRequest): Promise<AuthResponse> {
-    const response = await this.api.post<AuthResponse>("/auth/register", data);
-    console.log("Register response:", response);
-    return response.data;
+    try {
+      const response = await this.api.post<AuthResponse>(
+        "/auth/register",
+        data
+      );
+      if (API_CONFIG.ENABLE_LOGGING) {
+        console.log("✅ Registration successful");
+      }
+      return response.data;
+    } catch (error: any) {
+      if (API_CONFIG.ENABLE_LOGGING) {
+        console.error("❌ Registration failed:", error.response?.data?.message);
+      }
+      throw error;
+    }
   }
 
   async login(data: LoginRequest): Promise<AuthResponse> {
-    const response = await this.api.post<AuthResponse>("/auth/login", data);
-    return response.data;
+    try {
+      const response = await this.api.post<AuthResponse>("/auth/login", data);
+      if (API_CONFIG.ENABLE_LOGGING) {
+        console.log("✅ Login successful");
+      }
+      return response.data;
+    } catch (error: any) {
+      if (API_CONFIG.ENABLE_LOGGING) {
+        console.error("❌ Login failed:", error.response?.data?.message);
+      }
+      throw error;
+    }
   }
 
   async saveToken(token: string | undefined): Promise<void> {
     if (!token) {
-      console.warn(
-        "Attempted to save empty or undefined token. Use removeToken() instead."
-      );
+      console.warn("Attempted to save empty token. Use removeToken() instead.");
       return;
     }
     await AsyncStorage.setItem(TOKEN_KEY, token);
+
+    // Store token expiry time (default: 1 hour from now)
+    const expiryTime = Date.now() + 3600000;
+    await AsyncStorage.setItem(TOKEN_EXPIRY_KEY, expiryTime.toString());
   }
 
   async getToken(): Promise<string | null> {
-    return await AsyncStorage.getItem(TOKEN_KEY);
+    const token = await AsyncStorage.getItem(TOKEN_KEY);
+
+    if (!token) return null;
+
+    // Check if token is expired
+    const expiryTimeStr = await AsyncStorage.getItem(TOKEN_EXPIRY_KEY);
+    if (expiryTimeStr) {
+      const expiryTime = parseInt(expiryTimeStr, 10);
+      if (Date.now() > expiryTime) {
+        await this.removeToken();
+        return null;
+      }
+    }
+
+    return token;
   }
 
   async removeToken(): Promise<void> {
     await AsyncStorage.removeItem(TOKEN_KEY);
+    await AsyncStorage.removeItem(TOKEN_EXPIRY_KEY);
   }
 
   async saveUserRole(role: string): Promise<void> {
@@ -190,6 +258,13 @@ class ApiService {
     console.log(`🏁 [API] POST /sos/${sosId}/complete - Completing SOS`);
     const response = await this.api.post<SOSResponse>(`/sos/${sosId}/complete`);
     console.log(`✅ [API] SOS completed response:`, response.data);
+    return response.data;
+  }
+
+  async cancelSOS(sosId: number): Promise<SOSResponse> {
+    console.log(`❌ [API] POST /sos/${sosId}/cancel - Cancelling SOS`);
+    const response = await this.api.post<SOSResponse>(`/sos/${sosId}/cancel`);
+    console.log(`✅ [API] SOS cancelled response:`, response.data);
     return response.data;
   }
 }

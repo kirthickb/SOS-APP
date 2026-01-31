@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import { RouteProp, useRoute } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import * as Location from "expo-location";
 import { ClientStackParamList } from "../../navigation/AppNavigator";
 import socketService from "../../services/socket";
@@ -27,6 +28,7 @@ const ClientMapScreen: React.FC = () => {
   const { sosId } = route.params;
 
   const [loading, setLoading] = useState(true);
+  const navigation = useNavigation();
   const [locationPermissionGranted, setLocationPermissionGranted] =
     useState(false);
   const [sosData, setSosData] = useState<SOSResponse | null>(null);
@@ -55,6 +57,14 @@ const ClientMapScreen: React.FC = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Prevent back navigation when on map screen during active SOS
+  useEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => null, // Hide back button
+      gestureEnabled: false, // Disable iOS swipe-back gesture
+    });
+  }, [navigation]);
 
   useEffect(() => {
     // Update route and distance when driver location changes

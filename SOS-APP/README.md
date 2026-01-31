@@ -24,12 +24,12 @@ A production-ready React Native (Expo + TypeScript) mobile application for emerg
 - **Framework**: React Native with Expo SDK
 - **Language**: TypeScript
 - **Navigation**: React Navigation v6
-- **State Management**: Context API (AuthContext, SocketContext)
+- **State Management**: Context API (AuthContext, SocketContext, SOSContext)
 - **API Communication**: Axios with JWT interceptors
-- **Real-time**: STOMP over SockJS WebSocket
-- **Maps**: react-native-maps with OpenStreetMap tiles
-- **Location**: expo-location
-- **Storage**: AsyncStorage
+- **Real-time**: STOMP over SockJS WebSocket (`/topic/sos` + user topics)
+- **Maps**: `react-native-maps` with Google Maps provider + Directions API
+- **Location**: `expo-location`
+- **Storage**: AsyncStorage for persisted SOS state (activeSOS, status)
 
 ## 🛠️ Prerequisites
 
@@ -48,23 +48,23 @@ A production-ready React Native (Expo + TypeScript) mobile application for emerg
 
 2. **Configure Backend URL**:
 
-   Edit `src/services/api.ts` and update the `BASE_URL`:
+   Edit `app/config/index.ts` (API_CONFIG):
 
    ```typescript
    // For Android Emulator (default)
-   const BASE_URL = "http://10.201.132.18:8080/api";
+   BASE_URL: "http://10.201.132.18:8080/api",
 
    // For iOS Simulator
-   const BASE_URL = "http://10.201.132.18:8080/api";
+   BASE_URL: "http://10.201.132.18:8080/api",
 
    // For Physical Device (replace with your computer's IP)
-   const BASE_URL = "http://192.168.1.X:8080/api";
+   BASE_URL: "http://192.168.1.X:8080/api",
    ```
 
-   Similarly update `src/services/socket.ts`:
+   WebSocket endpoint is set in `app/services/socket.ts`:
 
    ```typescript
-   const SOCKET_URL = "http://10.201.132.18:8080/ws";
+   const WS_URL = "http://10.201.132.18:8080/ws";
    ```
 
 3. **Start the development server**:
@@ -81,12 +81,13 @@ A production-ready React Native (Expo + TypeScript) mobile application for emerg
 ## 📱 Application Structure
 
 ```
-src/
+app/
 ├── context/
-│   ├── AuthContext.tsx          # Authentication state management
-│   └── SocketContext.tsx        # WebSocket connection management
+│   ├── AuthContext.tsx          # Authentication
+│   ├── SocketContext.tsx        # WebSocket connection
+│   └── SOSContext.tsx           # SOS lifecycle + persistence
 ├── navigation/
-│   ├── AuthNavigator.tsx        # Login/Register navigation
+│   ├── AuthNavigator.tsx        # Login/Register flows
 │   └── AppNavigator.tsx         # Role-based navigation (Client/Driver)
 ├── screens/
 │   ├── auth/
@@ -95,18 +96,20 @@ src/
 │   ├── client/
 │   │   ├── ClientHomeScreen.tsx    # SOS button
 │   │   ├── ClientProfileScreen.tsx # Health information
-│   │   └── ClientMapScreen.tsx     # Track ambulance
+│   │   └── ClientMapScreen.tsx     # Track ambulance + alerts
 │   └── driver/
 │       ├── DriverHomeScreen.tsx    # SOS alerts list
 │       ├── DriverProfileScreen.tsx # Vehicle information
-│       └── DriverMapScreen.tsx     # Navigation to patient
+│       └── DriverMapScreen.tsx     # Navigation + status updates
 ├── services/
 │   ├── api.ts                   # Axios API service with JWT
-│   └── socket.ts                # WebSocket service
+│   └── socket.ts                # WebSocket (STOMP + SockJS)
 ├── types/
-│   └── index.ts                 # TypeScript interfaces
-└── utils/
-    └── location.ts              # Location utilities
+│   └── index.ts                 # TypeScript enums & interfaces
+├── utils/
+│   └── location.ts              # Routing, distance, ETA helpers
+└── config/
+   └── index.ts                 # API base URL, maps config
 ```
 
 ## 🔐 Authentication Flow
@@ -117,50 +120,54 @@ src/
 4. **Auto-login**: Check saved token on app start
 5. **Logout**: Clear token and disconnect WebSocket
 
-## 🆘 SOS Flow
+## 🆘 SOS Flow (Statuses)
 
-### Client Side:
+Status lifecycle: `PENDING → ACCEPTED → ARRIVED → COMPLETED` (backend is source of truth).
+
+### Client Side
 
 1. Open app → **ClientHomeScreen**
 2. Grant location permission
 3. Press **SOS Button** (big red button)
-4. SOS request sent with current coordinates
-5. Wait for driver to accept
-6. Navigate to **ClientMapScreen** to track ambulance
+4. SOS request sent with current coordinates (status: PENDING)
+5. Wait for driver to accept (status: ACCEPTED)
+6. Receive alerts:
+   - **ARRIVED** → "Ambulance Arrived" (driver picked up patient)
+   - **COMPLETED** → "Emergency Completed"
+7. Track ambulance on **ClientMapScreen** via WebSocket updates
 
-### Driver Side:
+### Driver Side
 
 1. Open app → **DriverHomeScreen**
 2. Toggle **Online** status
 3. Receive real-time SOS alerts via WebSocket
-4. View SOS list with distance calculation
-5. Press **Accept** on an SOS request
-6. Navigate to **DriverMapScreen** with turn-by-turn navigation
-7. Use **Open Maps** button for Google Maps integration
+4. Accept SOS (status: ACCEPTED)
+5. Navigate with **DriverMapScreen**
+6. **Patient Picked Up** → calls `/sos/{id}/arrived` (status: ARRIVED)
+7. **Complete Emergency** → calls `/sos/{id}/complete` (status: COMPLETED)
+8. Screens stay mounted until status = COMPLETED
 
 ## 🗺️ Maps Configuration
 
-The app uses **OpenStreetMap** tiles (free, no API key required) and OSRM routing service.
+- Provider: **Google Maps** via `react-native-maps`
+- API Key: configured in `app/config/index.ts` and `app.json` (`googleMapsApiKey`)
+- Routing/ETA: helpers in `app/utils/location.ts`
 
 ## 🔌 WebSocket Integration
 
-Real-time SOS alerts powered by STOMP over SockJS connecting to backend at `/ws` endpoint.
+- Protocol: STOMP over SockJS (`/ws` endpoint)
+- Topics: `/topic/sos` (broadcast) and `/user/{clientId}/topic/sos`
+- Source of truth: Backend broadcasts after every status changes
+- Frontend state: `SOSContext` listens to WebSocket and updates `activeSOS`
 
 ## 🧪 Testing
 
-### Test as CLIENT:
+Use the end-to-end checklist in `STATUS_UPDATE_FIX.md` and `TESTING_QUICK_GUIDE.md` for:
 
-1. Register with role: **CLIENT**
-2. Fill health profile (age, blood group, emergency contact)
-3. Go to Home → Press SOS button
-4. Grant location permission
-
-### Test as DRIVER:
-
-1. Register with role: **DRIVER**
-2. Fill driver profile (vehicle number, service city)
-3. Go to Home → Toggle **Online**
-4. Accept SOS requests
+- Full status flow (ACCEPTED → ARRIVED → COMPLETED)
+- Real-time location after ARRIVED
+- App background/foreground persistence via AsyncStorage
+- Error validation for invalid transitions
 
 ## 🚨 Common Issues & Solutions
 

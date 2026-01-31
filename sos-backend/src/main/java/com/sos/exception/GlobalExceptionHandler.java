@@ -23,7 +23,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<Map<String, Object>> handleBadCredentials(BadCredentialsException ex) {
-        log.warn("Bad credentials: {}", ex.getMessage());
+        log.warn("Bad credentials attempt");
         return buildErrorResponse(
                 HttpStatus.UNAUTHORIZED,
                 "Invalid phone number or password",
@@ -38,6 +38,46 @@ public class GlobalExceptionHandler {
                 HttpStatus.UNAUTHORIZED,
                 "User not found",
                 "USER_NOT_FOUND"
+        );
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleResourceNotFound(ResourceNotFoundException ex) {
+        log.warn("Resource not found: {}", ex.getMessage());
+        return buildErrorResponse(
+                HttpStatus.NOT_FOUND,
+                ex.getMessage(),
+                "RESOURCE_NOT_FOUND"
+        );
+    }
+
+    @ExceptionHandler(UserAlreadyExistsException.class)
+    public ResponseEntity<Map<String, Object>> handleUserAlreadyExists(UserAlreadyExistsException ex) {
+        log.warn("User already exists: {}", ex.getMessage());
+        return buildErrorResponse(
+                HttpStatus.CONFLICT,
+                ex.getMessage(),
+                "USER_ALREADY_EXISTS"
+        );
+    }
+
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<Map<String, Object>> handleUnauthorized(UnauthorizedException ex) {
+        log.warn("Unauthorized access attempt: {}", ex.getMessage());
+        return buildErrorResponse(
+                HttpStatus.FORBIDDEN,
+                ex.getMessage(),
+                "UNAUTHORIZED"
+        );
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
+        log.warn("Invalid argument: {}", ex.getMessage());
+        return buildErrorResponse(
+                HttpStatus.BAD_REQUEST,
+                ex.getMessage(),
+                "INVALID_ARGUMENT"
         );
     }
 
@@ -63,7 +103,7 @@ public class GlobalExceptionHandler {
         log.error("Runtime exception: ", ex);
         return buildErrorResponse(
                 HttpStatus.BAD_REQUEST,
-                ex.getMessage(),
+                ex.getMessage() != null ? ex.getMessage() : "An error occurred",
                 "RUNTIME_ERROR"
         );
     }
