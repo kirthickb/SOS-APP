@@ -11,23 +11,30 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.nishanth21.sosapp",
-      "googleMapsApiKey": "AIzaSyAlM6ydnd7-cE7Y9YSqLoF7G4iHWk0Sl8k",
+      "config": {
+        "googleMapsApiKey": "AIzaSyAlM6ydnd7-cE7Y9YSqLoF7G4iHWk0Sl8k"
+      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app needs access to your location to send emergency SOS alerts with your current coordinates.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to your location to track ambulance and provide real-time navigation."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to your location to track ambulance and provide real-time navigation.",
+        "NSMicrophoneUsageDescription": "This app needs access to your microphone to enable voice-based emergency SOS triggering.",
+        "NSSpeechRecognitionUsageDescription": "This app needs speech recognition to detect emergency keywords for automatic SOS alerts."
       }
     },
 
     "android": {
       "package": "com.nishanth21.sosapp",
-      "googleMapsApiKey": "AIzaSyAlM6ydnd7-cE7Y9YSqLoF7G4iHWk0Sl8k",
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
+        "RECORD_AUDIO",
         "FOREGROUND_SERVICE"
       ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAlM6ydnd7-cE7Y9YSqLoF7G4iHWk0Sl8k"
+        }
+      },
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -36,22 +43,15 @@
       }
     },
 
-    "web": {
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
-    },
-
     "plugins": [
+      "expo-speech-recognition",
       [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
-          "dark": {
-            "backgroundColor": "#000000"
-          }
+          "backgroundColor": "#ffffff"
         }
       ]
     ],
@@ -59,12 +59,6 @@
     "experiments": {
       "reactCompiler": true,
       "newArchEnabled": true
-    },
-
-    "extra": {
-      "eas": {
-        "projectId": "fdb821e4-487c-40ea-8fa9-29e8af51d30a"
-      }
     }
   }
 }

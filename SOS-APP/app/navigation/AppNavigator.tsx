@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect } from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
@@ -109,7 +109,7 @@ const ClientNavigator: React.FC = () => {
 };
 
 // Driver Tab Navigator with Active SOS Detection
-const DriverTabNavigator: React.FC<{ navigationRef: any }> = ({
+const DriverTabNavigator: React.FC<{ navigationRef: React.RefObject<any> }> = ({
   navigationRef,
 }) => {
   const { acceptedSOS, isLoadingActiveSOS } = useSOSContext();
@@ -161,7 +161,7 @@ const DriverTabNavigator: React.FC<{ navigationRef: any }> = ({
 };
 
 // Driver Stack Navigator
-const DriverNavigator: React.FC<{ navigationRef: any }> = ({
+const DriverNavigator: React.FC<{ navigationRef: React.RefObject<any> }> = ({
   navigationRef,
 }) => {
   return (
@@ -185,9 +185,33 @@ const DriverNavigator: React.FC<{ navigationRef: any }> = ({
 };
 
 // Main App Navigator - Role-based routing
-const AppNavigator: React.FC = () => {
+const AppNavigator: React.FC<{ navigationRef: React.RefObject<any> }> = ({
+  navigationRef,
+}) => {
   const { userRole } = useAuth();
-  const navigationRef = useRef(null);
+  const { activeSOS, isLoadingActiveSOS } = useSOSContext();
+
+  useEffect(() => {
+    if (
+      userRole === UserRole.CLIENT &&
+      !isLoadingActiveSOS &&
+      activeSOS &&
+      ["PENDING", "ACCEPTED", "ARRIVED"].includes(activeSOS.status)
+    ) {
+      if (navigationRef.current?.reset) {
+        navigationRef.current.reset({
+          index: 0,
+          routes: [{ name: "ClientMap", params: { sosId: activeSOS.id } }],
+        });
+      }
+    }
+  }, [
+    userRole,
+    isLoadingActiveSOS,
+    activeSOS?.id,
+    activeSOS?.status,
+    navigationRef,
+  ]);
 
   if (userRole === UserRole.CLIENT) {
     return <ClientNavigator />;

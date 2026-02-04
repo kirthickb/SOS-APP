@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import { StatusBar } from "expo-status-bar";
 import { NavigationContainer } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -12,6 +12,7 @@ import { ErrorBoundary } from "./app/components/ErrorBoundary";
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
+  const navigationRef = useRef<any>(null);
 
   if (isLoading) {
     return (
@@ -22,8 +23,12 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <NavigationContainer>
-      {isAuthenticated ? <AppNavigator /> : <AuthNavigator />}
+    <NavigationContainer ref={navigationRef}>
+      {isAuthenticated ? (
+        <AppNavigator navigationRef={navigationRef} />
+      ) : (
+        <AuthNavigator />
+      )}
     </NavigationContainer>
   );
 };

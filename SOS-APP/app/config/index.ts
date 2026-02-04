@@ -14,8 +14,8 @@ export const API_CONFIG = {
   // - Android: http://10.223.129.18:8080/api (change IP to your machine)
   // - iOS: http://10.223.129.18:8080/api
   // - Production: https://your-domain.com/api
-  BASE_URL: getEnvVar("API_BASE_URL", "http://10.223.129.18:8080/api"),
-  SOCKET_URL: getEnvVar("SOCKET_URL", "http://10.223.129.18:8080/ws"),
+  BASE_URL: getEnvVar("API_BASE_URL", "http://192.168.1.4:8080/api"),
+  SOCKET_URL: getEnvVar("SOCKET_URL", "http://192.168.1.4:8080/ws"),
   TIMEOUT: 10000,
   ENABLE_LOGGING: getEnvVar("ENABLE_LOGGING", "false") === "true",
 };

@@ -52,10 +52,10 @@ A production-ready React Native (Expo + TypeScript) mobile application for emerg
 
    ```typescript
    // For Android Emulator (default)
-   BASE_URL: "http://10.201.132.18:8080/api",
+   BASE_URL: "http://192.168.1.4:8080/api",
 
    // For iOS Simulator
-   BASE_URL: "http://10.201.132.18:8080/api",
+   BASE_URL: "http://192.168.1.4:8080/api",
 
    // For Physical Device (replace with your computer's IP)
    BASE_URL: "http://192.168.1.X:8080/api",
@@ -64,7 +64,7 @@ A production-ready React Native (Expo + TypeScript) mobile application for emerg
    WebSocket endpoint is set in `app/services/socket.ts`:
 
    ```typescript
-   const WS_URL = "http://10.201.132.18:8080/ws";
+   const WS_URL = "http://192.168.1.4:8080/ws";
    ```
 
 3. **Start the development server**:
@@ -173,8 +173,8 @@ Use the end-to-end checklist in `STATUS_UPDATE_FIX.md` and `TESTING_QUICK_GUIDE.
 
 ### Cannot connect to backend
 
-- Android Emulator: Use `http://10.201.132.18:8080`
-- iOS Simulator: Use `http://10.201.132.18:8080`
+- Android Emulator: Use `http://192.168.1.4:8080`
+- iOS Simulator: Use `http://192.168.1.4:8080`
 - Physical Device: Use your computer's local IP address
 
 ### Location permission denied

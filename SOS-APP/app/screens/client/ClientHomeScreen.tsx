@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -7,25 +7,110 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
+  Switch,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
+import * as Speech from "expo-speech";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
 import { ClientStackParamList } from "../../navigation/AppNavigator";
 import { useAuth } from "../../context/AuthContext";
 import { useSOSContext } from "../../context/SOSContext";
 import apiService from "../../services/api";
+import { useVoiceSOS } from "../../hooks/useVoiceSOS";
+import { useCrashML } from "../../hooks/useCrashML";
+import { triggerAutomaticSOS } from "../../services/autoSOS";
+import voiceSOSService from "../../services/voiceSOS";
 
 type NavigationProp = NativeStackNavigationProp<ClientStackParamList>;
 
 const ClientHomeScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const { logout } = useAuth();
-  const { activeSOS, isSosActive, cancelSOS, isLoadingActiveSOS } =
-    useSOSContext();
+  const {
+    activeSOS,
+    isSosActive,
+    cancelSOS,
+    isLoadingActiveSOS,
+    setClientActiveSOS,
+  } = useSOSContext();
   const [loading, setLoading] = useState(false);
   const [locationPermission, setLocationPermission] = useState(false);
+
+  // Voice SOS and Crash ML states
+  const [voiceSOSEnabled, setVoiceSOSEnabled] = useState(false);
+  const [drivingModeEnabled, setDrivingModeEnabled] = useState(false);
+  const voiceTriggerPendingRef = useRef(false);
+
+  const handleVoiceAutoSOS = async () => {
+    if (voiceTriggerPendingRef.current) {
+      return;
+    }
+
+    voiceTriggerPendingRef.current = true;
+
+    try {
+      Speech.speak(
+        "Voice SOS detected. Say cancel within five seconds to stop.",
+        { rate: 0.95, pitch: 1.0 }
+      );
+
+      const cancelled = await voiceSOSService.startCancelWindow(
+        [
+          "cancel",
+          "stop",
+          "abort",
+          "false alarm",
+          "don\u2019t send",
+          "do not send",
+        ],
+        5000
+      );
+
+      if (cancelled) {
+        Speech.speak("SOS cancelled.", { rate: 0.95, pitch: 1.0 });
+        return;
+      }
+
+      const result = await triggerAutomaticSOS("VOICE");
+      if (result.success && result.sos) {
+        await setClientActiveSOS(result.sos);
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "ClientMap", params: { sosId: result.sos.id } }],
+        });
+      } else {
+        Alert.alert("Error", result.message);
+      }
+    } finally {
+      voiceTriggerPendingRef.current = false;
+    }
+  };
+
+  // Use Voice SOS hook
+  const { isListening, error: voiceError } = useVoiceSOS(
+    voiceSOSEnabled,
+    handleVoiceAutoSOS
+  );
+
+  // Use Crash ML hook
+  const { isMonitoring, isVerifying, latestAnomalyScore } = useCrashML(
+    drivingModeEnabled,
+    async () => {
+      console.log("🚗 [ClientHomeScreen] Crash detected");
+      const result = await triggerAutomaticSOS("CRASH_ML");
+      if (result.success && result.sos) {
+        await setClientActiveSOS(result.sos);
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "ClientMap", params: { sosId: result.sos.id } }],
+        });
+      } else {
+        Alert.alert("Error", result.message);
+      }
+    }
+  );
 
   useEffect(() => {
     checkLocationPermission();
@@ -107,17 +192,12 @@ const ClientHomeScreen: React.FC = () => {
         longitude,
       });
 
-      Alert.alert(
-        "🚨 SOS Sent!",
-        "Your emergency alert has been sent to nearby ambulances. Please wait...",
-        [
-          {
-            text: "Track Ambulance",
-            onPress: () =>
-              navigation.navigate("ClientMap", { sosId: sosResponse.id }),
-          },
-        ]
-      );
+      await setClientActiveSOS(sosResponse);
+
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "ClientMap", params: { sosId: sosResponse.id } }],
+      });
     } catch (error: any) {
       console.error("SOS error:", error);
       Alert.alert(
@@ -157,6 +237,7 @@ const ClientHomeScreen: React.FC = () => {
                 "Your emergency alert has been cancelled."
               );
             } catch (error) {
+              console.error("Failed to cancel SOS:", error);
               Alert.alert("Error", "Failed to cancel SOS. Please try again.");
             }
           },
@@ -214,6 +295,63 @@ const ClientHomeScreen: React.FC = () => {
           Press the SOS button below in case of emergency. Nearby ambulances
           will be notified immediately.
         </Text>
+      </View>
+
+      {/* AUTOMATIC SOS TRIGGERS - Voice & Driving Mode */}
+      <View style={styles.automationCard}>
+        <Text style={styles.automationTitle}>Automatic SOS Triggers</Text>
+
+        {/* Voice SOS Toggle */}
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleLabel}>
+            <Ionicons name="mic" size={20} color="#2563EB" />
+            <View style={styles.toggleLabelText}>
+              <Text style={styles.toggleLabelTitle}>🎤 Voice SOS</Text>
+              <Text style={styles.toggleLabelSubtitle}>
+                {isListening
+                  ? "🔴 Listening..."
+                  : "Say: help, emergency, 108, accident"}
+              </Text>
+            </View>
+          </View>
+          <Switch
+            value={voiceSOSEnabled}
+            onValueChange={setVoiceSOSEnabled}
+            trackColor={{ false: "#767577", true: "#81C784" }}
+            thumbColor={voiceSOSEnabled ? "#2563EB" : "#f4f3f4"}
+          />
+        </View>
+
+        {voiceError && (
+          <Text style={styles.errorText}>⚠️ Voice error: {voiceError}</Text>
+        )}
+
+        {/* Driving Mode / ML Crash Detection Toggle */}
+        <View style={[styles.toggleRow, { marginTop: 16 }]}>
+          <View style={styles.toggleLabel}>
+            <Ionicons name="car" size={20} color="#DC2626" />
+            <View style={styles.toggleLabelText}>
+              <Text style={styles.toggleLabelTitle}>🚗 Driving Mode</Text>
+              <Text style={styles.toggleLabelSubtitle}>
+                {isMonitoring
+                  ? `Monitoring (Score: ${latestAnomalyScore.toFixed(3)})`
+                  : "ML Crash Detection"}
+              </Text>
+            </View>
+          </View>
+          <Switch
+            value={drivingModeEnabled}
+            onValueChange={setDrivingModeEnabled}
+            trackColor={{ false: "#767577", true: "#81C784" }}
+            thumbColor={drivingModeEnabled ? "#DC2626" : "#f4f3f4"}
+          />
+        </View>
+
+        {isVerifying && (
+          <Text style={styles.verifyingText}>
+            ⚠️ Anomaly detected - verifying...
+          </Text>
+        )}
       </View>
 
       {/* MAIN SOS BUTTON - Hidden if SOS already active */}
@@ -397,6 +535,61 @@ const styles = StyleSheet.create({
     color: "#1E40AF",
     fontSize: 14,
     lineHeight: 20,
+  },
+  automationCard: {
+    backgroundColor: "#F0F9FF",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 30,
+    borderLeftWidth: 4,
+    borderLeftColor: "#2563EB",
+  },
+  automationTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#1E40AF",
+    marginBottom: 16,
+  },
+  toggleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  toggleLabel: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  toggleLabelText: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  toggleLabelTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+  },
+  toggleLabelSubtitle: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
+  },
+  errorText: {
+    color: "#DC2626",
+    fontSize: 12,
+    marginTop: 8,
+    paddingHorizontal: 12,
+  },
+  verifyingText: {
+    color: "#F59E0B",
+    fontSize: 12,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    fontWeight: "500",
   },
   sosContainer: {
     alignItems: "center",

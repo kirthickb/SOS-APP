@@ -71,6 +71,7 @@ interface SOSContextType {
   isSosActive: boolean; // Convenience: true if activeSOS is not null and status is active
 
   // Methods
+  setClientActiveSOS: (sos: SOSResponse) => Promise<void>;
   acceptSOS: (
     sosId: number,
     driverId: number,
@@ -164,7 +165,7 @@ export const SOSProvider: React.FC<{ children: ReactNode }> = ({
 
   /**
    * Restore SOS state from persistent storage (on app restart/resume)
-   * Only restores active SOS if status is ACCEPTED, ARRIVED (not PENDING, COMPLETED, CANCELLED)
+   * Restores active SOS if status is PENDING, ACCEPTED, ARRIVED
    */
   const restoreSOSStateFromStorage = useCallback(async () => {
     try {
@@ -182,8 +183,8 @@ export const SOSProvider: React.FC<{ children: ReactNode }> = ({
 
       const sosData: ActiveSOS = JSON.parse(sosDataStr);
 
-      // Only restore if status is ACCEPTED or ARRIVED (active states)
-      if (!["ACCEPTED", "ARRIVED"].includes(sosStatus)) {
+      // Only restore if status is PENDING, ACCEPTED, or ARRIVED (active states)
+      if (!["PENDING", "ACCEPTED", "ARRIVED"].includes(sosStatus)) {
         console.log(
           "🗑️ [SOSContext] Clearing completed/cancelled SOS from storage - Status:",
           sosStatus
@@ -229,6 +230,34 @@ export const SOSProvider: React.FC<{ children: ReactNode }> = ({
       setIsLoadingActiveSOS(false);
     }
   }, [clearActiveSOS]);
+
+  /**
+   * Set active SOS for client (PENDING) and persist for restore on app restart
+   */
+  const setClientActiveSOS = useCallback(async (sos: SOSResponse) => {
+    try {
+      const sosData: ActiveSOS = {
+        ...sos,
+        createdAtTime: new Date().toISOString(),
+      };
+
+      setActiveSOS(sosData);
+
+      await AsyncStorage.multiSet([
+        [ACTIVE_SOS_KEY, JSON.stringify(sosData)],
+        [SOS_STATUS_KEY, "PENDING"],
+      ]);
+
+      await AsyncStorage.multiRemove([
+        DRIVER_INFO_KEY,
+        PATIENT_PICKUP_TIME_KEY,
+      ]);
+
+      console.log("✅ [SOSContext] Client SOS stored - ID:", sos.id);
+    } catch (error) {
+      console.error("❌ [SOSContext] Error storing client SOS:", error);
+    }
+  }, []);
 
   /**
    * Accept a SOS request (called by driver)
@@ -436,6 +465,7 @@ export const SOSProvider: React.FC<{ children: ReactNode }> = ({
     activeSOS,
     isLoadingActiveSOS,
     isSosActive,
+    setClientActiveSOS,
     acceptSOS,
     markPatientPickedUp,
     markSOSCompleted,

@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   TouchableOpacity,
+  BackHandler,
 } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import { RouteProp, useRoute } from "@react-navigation/native";
@@ -65,6 +66,23 @@ const ClientMapScreen: React.FC = () => {
       gestureEnabled: false, // Disable iOS swipe-back gesture
     });
   }, [navigation]);
+
+  // Block Android hardware back until SOS is completed/cancelled
+  useEffect(() => {
+    const onBackPress = () => {
+      if (sosData?.status === "COMPLETED" || sosData?.status === "CANCELLED") {
+        return false; // allow default behavior
+      }
+      return true; // block back
+    };
+
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      onBackPress
+    );
+
+    return () => subscription.remove();
+  }, [sosData?.status]);
 
   useEffect(() => {
     // Update route and distance when driver location changes
