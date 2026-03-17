@@ -1,0 +1,6 @@
+🧪 Starting Tests...
+✅ [CrashDetector] Model trained and stats calculated.
+Test 1 (Stationary Shake): PASSED ✅ (Reason: Physics gates not met)
+Test 2 (Hard Brake): PASSED ✅ (Score: 0.558, HighScores: 5, Reason: None, Gates: {"speed":true,"impact":true,"deceleration":true,"recovery":true})
+Test 3 (Pothole): PASSED ✅ (Gates: spd:true, imp:true, dec:false)
+Test 4 (Sensor Freeze): PASSED ✅

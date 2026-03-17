@@ -17,6 +17,8 @@ import voiceSOSService from "../services/voiceSOS";
 interface UseVoiceSOSOptions {
   keywords?: string[];
   cooldownSeconds?: number;
+  cancelKeywords?: string[];
+  cancelWindowMs?: number;
   onError?: (error: string) => void;
 }
 
@@ -39,7 +41,6 @@ export const useVoiceSOS = (
 ): UseVoiceSOSResult => {
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const initializedRef = useRef(false);
   const onTriggerRef = useRef(onTrigger);
 
   // Update ref when callback changes
@@ -49,34 +50,42 @@ export const useVoiceSOS = (
 
   const keywords = options.keywords || ["help", "emergency", "108", "accident"];
   const cooldownSeconds = options.cooldownSeconds || 30;
+  const cancelKeywords = options.cancelKeywords || [
+    "cancel",
+    "stop",
+    "abort",
+    "false alarm",
+    "don't send",
+    "do not send",
+  ];
+  const cancelWindowMs = options.cancelWindowMs || 10000;
 
   // Initialize service once on mount
   useEffect(() => {
-    if (!initializedRef.current) {
-      console.log("🎤 [useVoiceSOS] Initializing voice SOS service");
-      voiceSOSService.initialize({
-        keywords,
-        cooldownSeconds,
-        onTrigger: (triggerType) => {
-          console.log("🎤 [useVoiceSOS] SOS triggered via:", triggerType);
-          onTriggerRef.current();
-        },
-        onListeningStateChange: setIsListening,
-        onError: (err) => {
-          console.error("🎤 [useVoiceSOS] Error:", err);
-          setError(err);
-        },
-      });
-      initializedRef.current = true;
-      console.log("🎤 [useVoiceSOS] Service initialized successfully");
-    }
+    console.log("🎤 [useVoiceSOS] Initializing voice SOS service");
+    voiceSOSService.initialize({
+      keywords,
+      cooldownSeconds,
+      cancelKeywords,
+      cancelWindowMs,
+      onTrigger: async (triggerType) => {
+        console.log("🎤 [useVoiceSOS] SOS triggered via:", triggerType);
+        await onTriggerRef.current();
+      },
+      onListeningStateChange: setIsListening,
+      onError: (err) => {
+        console.error("🎤 [useVoiceSOS] Error:", err);
+        setError(err);
+      },
+    });
+    console.log("🎤 [useVoiceSOS] Service initialized successfully");
 
     return () => {
       // Cleanup on unmount only
       console.log("🎤 [useVoiceSOS] Cleaning up");
       voiceSOSService.stopListening();
     };
-  }, []); // Empty dependency array - initialize once
+  }, [keywords, cooldownSeconds, cancelKeywords, cancelWindowMs]);
 
   // Handle enable/disable separately
   useEffect(() => {

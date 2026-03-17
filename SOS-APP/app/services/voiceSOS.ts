@@ -20,8 +20,9 @@
 import { ExpoSpeechRecognitionModule } from "expo-speech-recognition";
 import type { ExpoSpeechRecognitionOptions } from "expo-speech-recognition";
 import type { ExpoSpeechRecognitionPermissionResponse } from "expo-speech-recognition/build/ExpoSpeechRecognitionModule.types";
+import * as Speech from "expo-speech";
 
-type VoiceSOSCallback = (triggerType: string) => void;
+type VoiceSOSCallback = (triggerType: string) => void | Promise<void>;
 
 interface VoiceSOSConfig {
   keywords: string[];
@@ -29,6 +30,8 @@ interface VoiceSOSConfig {
   onTrigger: VoiceSOSCallback;
   onListeningStateChange?: (isListening: boolean) => void;
   onError?: (error: string) => void;
+  cancelKeywords?: string[];
+  cancelWindowMs?: number;
 }
 
 class VoiceSOSService {
@@ -56,7 +59,7 @@ class VoiceSOSService {
       config.keywords
     );
   }
-
+  
   /**
    * Start listening for voice commands
    */
@@ -83,7 +86,7 @@ class VoiceSOSService {
     // Initialize speech recognition
     this.initializeSpeechRecognition();
   }
-
+  
   /**
    * Stop listening for voice commands
    */
@@ -331,14 +334,24 @@ class VoiceSOSService {
       console.log(
         `🎤 [VoiceSOSService] Keyword detected: "${detectedKeyword}"`
       );
-      this.triggerSOSIfAllowed(detectedKeyword);
+      // Synchronously start the cancel window and trigger SOS
+      this.startAndWaitCancelWindow(detectedKeyword);
     }
   }
 
   /**
-   * Trigger SOS with cooldown check
+   * Start cancel window and handle SOS trigger after window closes
+   * This is synchronous to ensure cancel window is set up before next transcript
    */
-  private triggerSOSIfAllowed(keyword: string): void {
+  private startAndWaitCancelWindow(keyword: string): void {
+    // Prevent duplicate triggers while cancel window is active
+    if (this.cancelWindowActive) {
+      console.log(
+        `🎤 [VoiceSOSService] Cancel window already active, ignoring duplicate trigger`
+      );
+      return;
+    }
+
     const now = Date.now();
     const timeSinceLastTrigger = now - this.lastTriggerTime;
     const cooldownMs = (this.config?.cooldownSeconds || 30) * 1000;
@@ -356,9 +369,67 @@ class VoiceSOSService {
     this.lastTriggerTime = now;
     console.log(`🎤 [VoiceSOSService] Triggering SOS for keyword: ${keyword}`);
 
-    if (this.config?.onTrigger) {
-      this.config.onTrigger("VOICE");
-    }
+    // Speak alert message
+    Speech.speak("Voice SOS detected. Say cancel within ten seconds to stop.", {
+      rate: 0.95,
+      pitch: 1.0,
+    });
+
+    // Get cancel configuration
+    const cancelKeywords = this.config?.cancelKeywords || [
+      "cancel",
+      "stop",
+      "abort",
+      "false alarm",
+      "don't send",
+      "do not send",
+    ];
+    const cancelWindowMs = this.config?.cancelWindowMs || 10000;
+
+    // Start cancel window - this will be checked during transcript processing
+    const cancelPromise = this.startCancelWindow(
+      cancelKeywords,
+      cancelWindowMs
+    );
+
+    // Handle the result asynchronously
+    cancelPromise
+      .then((cancelled) => {
+        if (cancelled) {
+          console.log(
+            `🎤 [VoiceSOSService] SOS cancelled by user within cancel window`
+          );
+          // Speak cancellation message
+          Speech.speak("SOS cancelled.", { rate: 0.95, pitch: 1.0 });
+          return;
+        }
+
+        // Trigger the SOS callback if not cancelled
+        if (this.config?.onTrigger) {
+          // Speak sending message
+          Speech.speak("Sending SOS alert to emergency services.", {
+            rate: 0.95,
+            pitch: 1.0,
+          });
+
+          const result = this.config.onTrigger("VOICE");
+          // Handle if result is a promise
+          if (result && typeof result === "object" && "catch" in result) {
+            (result as Promise<void>).catch((error: any) => {
+              console.error(
+                "🎤 [VoiceSOSService] Error triggering SOS:",
+                error instanceof Error ? error.message : String(error)
+              );
+            });
+          }
+        }
+      })
+      .catch((error: any) => {
+        console.error(
+          "🎤 [VoiceSOSService] Error in cancel window:",
+          error instanceof Error ? error.message : String(error)
+        );
+      });
   }
 
   /**

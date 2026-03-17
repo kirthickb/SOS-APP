@@ -41,10 +41,10 @@ import java.util.List;
 @EnableMethodSecurity(securedEnabled = true, jsr250Enabled = true)
 @RequiredArgsConstructor
 public class SecurityConfig {
-
+    
     private final JwtAuthenticationFilter jwtAuthFilter;
     private final CustomUserDetailsService userDetailsService;
-
+    
     /**
      * Main security filter chain - MOBILE API ONLY
      */
@@ -64,7 +64,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
-                
+            
                 // STEP 4: Configure endpoint access rules
                 .authorizeHttpRequests(auth -> auth
                         // Public endpoints - accessible without authentication
@@ -120,9 +120,7 @@ public class SecurityConfig {
         } else {
             // Development default
             configuration.setAllowedOrigins(Arrays.asList(
-                "http://localhost:3000",
-                "http://localhost:8080",
-                "http://127.0.0.1:3000"
+                "*"
             ));
         }
         

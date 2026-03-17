@@ -1,305 +1,191 @@
-/**
- * ============================================================================
- * ISOLATION FOREST ALGORITHM
- * ============================================================================
- *
- * Purpose:
- * Implements the Isolation Forest anomaly detection algorithm in TypeScript.
- * Used for detecting crashes based on GPS speed and accelerometer data.
- *
- * Algorithm Overview:
- * - Builds random binary search trees on feature subsets
- * - Isolates anomalies by measuring path length to isolate points
- * - Anomaly score = 2^(-avg_path_length / c(n)) where c(n) = avg path length for normal data
- * - Score closer to 1.0 indicates anomaly, closer to 0.5 indicates normal
- *
- * Reference: "Isolation Forest" by Fei Tony Liu et al.
- */
+import { CrashFeature } from './anomalyTypes';
 
-import { CrashFeature } from "./anomalyTypes";
+type FeatureKey = keyof CrashFeature;
 
-interface Node {
-  featureIndex?: number; // Which feature was used to split (0=speed, 1=motion, 2=deltaSpeed)
-  splitValue?: number; // Value used for split
-  left?: Node; // Left subtree (< splitValue)
-  right?: Node; // Right subtree (>= splitValue)
-  size?: number; // Number of samples at this node (for leaf nodes)
+interface IsolationNode {
+    feature?: FeatureKey;
+    splitValue?: number;
+    left?: IsolationNode;
+    right?: IsolationNode;
+    size: number;
 }
 
-interface ITree {
-  root: Node;
-  height: number;
-}
+type IsolationTree = {
+    root: IsolationNode;
+};
 
-/**
- * Isolation Forest implementation
- */
+type IsolationForestOptions = {
+    numTrees?: number;
+    sampleSize?: number;
+    maxDepth?: number;
+};
+
+const EULER_GAMMA = 0.5772156649;
+
 class IsolationForest {
-  private trees: ITree[] = [];
-  private numTrees: number = 100;
-  private sampleSize: number = 256;
-  private featureNames = ["speed", "motion", "deltaSpeed"];
-  private avgPathLengthCache: number = 0;
+    private trees: IsolationTree[] = [];
+    private readonly numTrees: number;
+    private readonly sampleSize: number;
+    private readonly maxDepth: number;
+    private readonly features: FeatureKey[] = ["speed", "motion", "deltaSpeed"];
 
-  /**
-   * Calculate average path length constant for normalization
-   * Based on average unsuccessful search in BST
-   */
-  private calculateC(n: number): number {
-    if (n <= 1) return 0;
-    return 2 * (Math.log(n - 1) + 0.5772156649) - (2 * (n - 1)) / n;
-  }
-
-  /**
-   * Fit isolation forest on normal driving data
-   * @param data - Array of normal driving features
-   */
-  fit(data: CrashFeature[]): void {
-    console.log(
-      "🌲 [IsolationForest] Fitting model on",
-      data.length,
-      "samples"
-    );
-
-    if (data.length === 0) {
-      console.warn(
-        "⚠️ [IsolationForest] Empty training data. Model will not be effective."
-      );
-      return;
+    constructor(options: IsolationForestOptions = {}) {
+        this.numTrees = Math.max(1, options.numTrees ?? 100);
+        this.sampleSize = Math.max(2, options.sampleSize ?? 256);
+        this.maxDepth = options.maxDepth ?? Math.ceil(Math.log2(this.sampleSize));
     }
 
-    this.trees = [];
-
-    // Build multiple isolation trees
-    for (let i = 0; i < this.numTrees; i++) {
-      // Random sample (with replacement)
-      const sample = this.randomSample(data, this.sampleSize);
-      const tree = this.buildTree(sample, 0);
-      this.trees.push(tree);
-
-      if ((i + 1) % 10 === 0) {
-        console.debug(`   Built tree ${i + 1}/${this.numTrees}`);
-      }
+    /**
+     * Train the isolation forest on a dataset
+     */
+    fit(data: CrashFeature[]): void {
+        this.trees = [];
+        
+        if (data.length < 2) {
+            console.warn("⚠️ [IsolationForest] Not enough data to train (min 2 samples required)");
+            return;
+        }
+        
+        const effectiveSampleSize = Math.min(data.length, this.sampleSize);
+        
+        for (let i = 0; i < this.numTrees; i += 1) {
+            const sample = this.randomSampleWithReplacement(data, effectiveSampleSize);
+            const root = this.buildTree(sample, 0);
+            this.trees.push({ root });
+        }
     }
 
-    // Cache average path length for scoring
-    this.avgPathLengthCache = this.calculateC(this.sampleSize);
+    /**
+     * Calculate anomaly score (0 to 1)
+     * Higher score = more anomalous
+     */
+    getAnomalyScore(feature: CrashFeature): number {
+        if (this.trees.length === 0) {
+            return 0.5;
+        }
 
-    console.log(
-      "✅ [IsolationForest] Model fitted with",
-      this.numTrees,
-      "trees"
-    );
-  }
+        let totalPathLength = 0;
+        for (const tree of this.trees) {
+            totalPathLength += this.getPathLength(tree.root, feature, 0);
+        }
+        
+        const avgPathLength = totalPathLength / this.trees.length;
+        const normalization = this.c(this.sampleSize);
+        
+        if (normalization <= 0) {
+            return 0.5;
+        }
 
-  /**
-   * Build a single isolation tree recursively
-   */
-  private buildTree(
-    data: CrashFeature[],
-    depth: number,
-    maxDepth: number = 12
-  ): ITree {
-    const node: Node = {};
-
-    // Terminal condition: max depth or single sample
-    if (depth >= maxDepth || data.length <= 1) {
-      node.size = data.length;
-      return {
-        root: node,
-        height: depth,
-      };
+        const score = Math.pow(2, -avgPathLength / normalization);
+        return Math.max(0, Math.min(1, score));
     }
 
-    // Randomly select feature and split value
-    const featureIndex = Math.floor(Math.random() * 3); // 0, 1, or 2
-    const feature = this.getFeature(data, featureIndex);
-
-    if (feature.length === 0) {
-      node.size = data.length;
-      return {
-        root: node,
-        height: depth,
-      };
+    /**
+     * Export the model for persistence
+     */
+    exportModel(): string {
+        return JSON.stringify({
+            trees: this.trees,
+            numTrees: this.numTrees,
+            sampleSize: this.sampleSize,
+            maxDepth: this.maxDepth
+        });
     }
 
-    const minVal = Math.min(...feature);
-    const maxVal = Math.max(...feature);
-
-    // If all values are same, can't split
-    if (minVal === maxVal) {
-      node.size = data.length;
-      return {
-        root: node,
-        height: depth,
-      };
+    /**
+     * Import a previously exported model
+     */
+    importModel(json: string): void {
+        try {
+            const data = JSON.parse(json);
+            this.trees = data.trees || [];
+        } catch (e) {
+            console.error("❌ [IsolationForest] Failed to import model", e);
+        }
     }
 
-    const splitValue = minVal + Math.random() * (maxVal - minVal);
+    private buildTree(data: CrashFeature[], depth: number): IsolationNode {
+        const node: IsolationNode = { size: data.length };
 
-    // Partition data
-    const left = data.filter(
-      (sample) => this.getFeatureValue(sample, featureIndex) < splitValue
-    );
-    const right = data.filter(
-      (sample) => this.getFeatureValue(sample, featureIndex) >= splitValue
-    );
+        if (depth >= this.maxDepth || data.length <= 1) {
+            return node;
+        }
 
-    node.featureIndex = featureIndex;
-    node.splitValue = splitValue;
+        // Select a random feature
+        const feature = this.features[Math.floor(Math.random() * this.features.length)];
+        
+        // Find min and max for the selected feature
+        let min = Infinity;
+        let max = -Infinity;
+        for (const row of data) {
+            const val = row[feature];
+            if (val < min) min = val;
+            if (val > max) max = val;
+        }
 
-    if (left.length > 0) {
-      const leftTree = this.buildTree(left, depth + 1, maxDepth);
-      node.left = leftTree.root;
+        if (min === max) {
+            return node;
+        }
+
+        const splitValue = min + Math.random() * (max - min);
+        const left: CrashFeature[] = [];
+        const right: CrashFeature[] = [];
+        
+        for (const row of data) {
+            if (row[feature] < splitValue) {
+                left.push(row);
+            } else {
+                right.push(row);
+            }
+        }
+        
+        if (left.length === 0 || right.length === 0) {
+            return node;
+        }
+
+        node.feature = feature;
+        node.splitValue = splitValue;
+        node.left = this.buildTree(left, depth + 1);
+        node.right = this.buildTree(right, depth + 1);
+
+        return node;
+    }
+    
+    private getPathLength(node: IsolationNode, feature: CrashFeature, depth: number): number {
+        if (!node.feature || node.splitValue === undefined || !node.left || !node.right) {
+            return depth + this.c(node.size);
+        }
+
+        const value = feature[node.feature];
+        if (value < node.splitValue) {
+            return this.getPathLength(node.left, feature, depth + 1);
+        }
+
+        return this.getPathLength(node.right, feature, depth + 1);
+    }
+    
+    private randomSampleWithReplacement(data: CrashFeature[], size: number): CrashFeature[] {
+        const sample: CrashFeature[] = [];
+
+        for (let i = 0; i < size; i += 1) {
+            const index = Math.floor(Math.random() * data.length);
+            sample.push(data[index]);
+        }
+
+        return sample;
     }
 
-    if (right.length > 0) {
-      const rightTree = this.buildTree(right, depth + 1, maxDepth);
-      node.right = rightTree.root;
+    private c(n: number): number {
+        if (n <= 1) {
+            return 0;
+        }
+
+        if (n === 2) {
+            return 1;
+        }
+
+        return 2 * (Math.log(n - 1) + EULER_GAMMA) - (2 * (n - 1)) / n;
     }
-
-    return {
-      root: node,
-      height:
-        Math.max(
-          node.left ? this.getTreeHeight(node.left) : 0,
-          node.right ? this.getTreeHeight(node.right) : 0
-        ) + 1,
-    };
-  }
-
-  /**
-   * Calculate path length for a given feature
-   * Returns depth in tree needed to isolate the sample
-   */
-  private getPathLength(
-    node: Node | undefined,
-    feature: CrashFeature,
-    depth: number = 0
-  ): number {
-    if (!node) {
-      return depth;
-    }
-
-    // Terminal node
-    if (node.size !== undefined) {
-      // Adjust for average successful search in BST
-      return depth + this.calculateC(node.size);
-    }
-
-    const featureIndex = node.featureIndex!;
-    const splitValue = node.splitValue!;
-    const value = this.getFeatureValue(feature, featureIndex);
-
-    if (value < splitValue) {
-      return this.getPathLength(node.left, feature, depth + 1);
-    } else {
-      return this.getPathLength(node.right, feature, depth + 1);
-    }
-  }
-
-  /**
-   * Get anomaly score for a single feature
-   * Score > 0.7 typically indicates anomaly
-   * Score ~ 0.5 indicates normal
-   * Score < 0.3 indicates very normal
-   */
-  getAnomalyScore(feature: CrashFeature): number {
-    if (this.trees.length === 0) {
-      console.warn("⚠️ [IsolationForest] No trees fitted. Call fit() first.");
-      return 0.5; // Return neutral score
-    }
-
-    // Calculate average path length across all trees
-    let totalPathLength = 0;
-    for (const tree of this.trees) {
-      const pathLength = this.getPathLength(tree.root, feature);
-      totalPathLength += pathLength;
-    }
-
-    const avgPathLength = totalPathLength / this.trees.length;
-
-    // Calculate anomaly score
-    // Formula: 2^(-E[h(x)] / c(n))
-    // where E[h(x)] is average path length across ensemble
-    const score = Math.pow(2, -avgPathLength / this.avgPathLengthCache);
-
-    return Math.min(1.0, Math.max(0, score)); // Clamp to [0, 1]
-  }
-
-  /**
-   * Batch anomaly scoring for multiple features
-   */
-  getAnomalyScores(features: CrashFeature[]): number[] {
-    return features.map((f) => this.getAnomalyScore(f));
-  }
-
-  /**
-   * Get feature value by index
-   */
-  private getFeatureValue(sample: CrashFeature, index: number): number {
-    const values = [sample.speed, sample.motion, sample.deltaSpeed];
-    return values[index] || 0;
-  }
-
-  /**
-   * Extract feature column from data
-   */
-  private getFeature(data: CrashFeature[], index: number): number[] {
-    const values = [
-      data.map((s) => s.speed),
-      data.map((s) => s.motion),
-      data.map((s) => s.deltaSpeed),
-    ];
-    return values[index] || [];
-  }
-
-  /**
-   * Random sample with replacement
-   */
-  private randomSample(data: CrashFeature[], size: number): CrashFeature[] {
-    const sample: CrashFeature[] = [];
-    for (let i = 0; i < size; i++) {
-      const randomIndex = Math.floor(Math.random() * data.length);
-      sample.push(data[randomIndex]);
-    }
-    return sample;
-  }
-
-  /**
-   * Get tree height
-   */
-  private getTreeHeight(node: Node | undefined): number {
-    if (!node) return 0;
-    if (node.size !== undefined) return 0; // Leaf node
-
-    const leftHeight = this.getTreeHeight(node.left);
-    const rightHeight = this.getTreeHeight(node.right);
-
-    return Math.max(leftHeight, rightHeight) + 1;
-  }
-
-  /**
-   * Get number of fitted trees
-   */
-  getTreeCount(): number {
-    return this.trees.length;
-  }
-
-  /**
-   * Get model info for debugging
-   */
-  getModelInfo(): {
-    numTrees: number;
-    sampleSize: number;
-    avgPathLengthConstant: number;
-  } {
-    return {
-      numTrees: this.trees.length,
-      sampleSize: this.sampleSize,
-      avgPathLengthConstant: this.avgPathLengthCache,
-    };
-  }
 }
 
 export default IsolationForest;

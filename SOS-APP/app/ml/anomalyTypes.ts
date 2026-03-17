@@ -48,3 +48,19 @@ export type AnomalyResult = {
   pathLength: number;
   timestamp: number;
 };
+
+/**
+ * Result of production-ready crash detection
+ */
+export type CrashDetectionResult = {
+  isCrash: boolean;
+  anomalyScore: number;
+  gatesPassed: {
+    speed: boolean;
+    impact: boolean;
+    deceleration: boolean;
+    recovery: boolean;
+  };
+  confidence: 'low' | 'medium' | 'high';
+  suppressedReason?: string;
+};

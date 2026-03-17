@@ -1,120 +1,176 @@
-/**
- * ============================================================================
- * USE CRASH ML HOOK
- * ============================================================================
- *
- * Purpose:
- * React hook to integrate Crash ML detection service into components.
- * Manages initialization, cleanup, and state synchronization.
- *
- * Usage:
- * const { isMonitoring, anomalyScore, error } = useCrashML(drivingModeEnabled, onCrashDetected);
- */
+import { useEffect, useRef, useState } from "react";
+import { Accelerometer, AccelerometerMeasurement } from "expo-sensors";
+import * as Location from "expo-location";
+import { feedReading, isCrashModelReady } from "../services/crashMLService";
+import { CrashFeature } from "../ml/anomalyTypes";
 
-import { useEffect, useState, useRef } from "react";
-import crashMLService from "../services/crashMLService";
-
-interface UseCrashMLOptions {
-  anomalyScoreThreshold?: number;
-  verificationDurationSeconds?: number;
-  onError?: (error: string) => void;
-}
-
-interface UseCrashMLResult {
+type UseCrashMLResult = {
   isMonitoring: boolean;
-  isVerifying: boolean;
   latestAnomalyScore: number;
-  anomalyScoreHistory: number[];
-  error: string | null;
-}
+};
 
-/**
- * Hook to manage Crash ML detector
- * @param enabled - Whether to enable crash detection
- * @param onCrashDetected - Callback when crash is detected
- * @param options - Configuration options
- */
+// PRODUCTION CONFIG
+const SAMPLING_INTERVAL_MS = 200; // 5Hz
+const GRAVITY = 9.80665;
+const MOTION_SMOOTHING_ALPHA = 0.3;
+
 export const useCrashML = (
   enabled: boolean,
-  onCrashDetected: () => void,
-  options: UseCrashMLOptions = {}
+  onCrashDetected: () => void
 ): UseCrashMLResult => {
   const [isMonitoring, setIsMonitoring] = useState(false);
-  const [isVerifying, setIsVerifying] = useState(false);
   const [latestAnomalyScore, setLatestAnomalyScore] = useState(0);
-  const [anomalyScoreHistory, setAnomalyScoreHistory] = useState<number[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const initializedRef = useRef(false);
-  const updateIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const anomalyScoreThreshold = options.anomalyScoreThreshold || 0.7;
-  const verificationDurationSeconds = options.verificationDurationSeconds || 5;
+  const speedRef = useRef(0);
+  const lastUpdateRef = useRef(0);
+  const previousMotionRef = useRef(GRAVITY);
+  const totalSamplesRef = useRef(0);
+  const onCrashDetectedRef = useRef(onCrashDetected);
+  
+  // Location subscription for real speed
+  const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
+  // Accelerometer subscription for motion
+  const accelerometerSubscriptionRef = useRef<{ remove: () => void } | null>(null);
+  
+  // Track active monitoring session to prevent async race conditions
+  const monitoringSessionRef = useRef(0);
 
   useEffect(() => {
-    // Initialize service only once
-    if (!initializedRef.current) {
-      crashMLService.initialize({
-        anomalyScoreThreshold,
-        verificationDurationSeconds,
-        onCrashDetected: (reason) => {
-          console.log("🚗 [useCrashML] Crash detected:", reason);
-          onCrashDetected();
-        },
-        onAnomalyScoreUpdate: (score) => {
-          setLatestAnomalyScore(score);
-        },
-        onError: (err) => {
-          console.error("🚗 [useCrashML] Error:", err);
-          setError(err);
-          options.onError?.(err);
-        },
-      });
-      initializedRef.current = true;
+    onCrashDetectedRef.current = onCrashDetected;
+  }, [onCrashDetected]);
+
+  useEffect(() => {
+    if (!enabled) {
+      stopMonitoring();
+      return;
     }
 
-    // Start or stop monitoring based on enabled flag
-    if (enabled) {
-      console.log("🚗 [useCrashML] Starting crash detection monitoring");
-      crashMLService.startMonitoring();
-      setIsMonitoring(true);
+    startMonitoring();
 
-      // Update state periodically to reflect monitoring status
-      updateIntervalRef.current = setInterval(() => {
-        setIsMonitoring(crashMLService.getIsMonitoring());
-        setIsVerifying(crashMLService.getIsVerifying());
-        setAnomalyScoreHistory(crashMLService.getAnomalyScoreHistory());
-      }, 1000);
-    } else {
-      console.log("🚗 [useCrashML] Stopping crash detection monitoring");
-      crashMLService.stopMonitoring();
-      setIsMonitoring(false);
-      setIsVerifying(false);
-
-      if (updateIntervalRef.current) {
-        clearInterval(updateIntervalRef.current);
-      }
-    }
-
-    // Cleanup on unmount
     return () => {
-      crashMLService.stopMonitoring();
-      if (updateIntervalRef.current) {
-        clearInterval(updateIntervalRef.current);
-      }
+      stopMonitoring();
     };
-  }, [
-    enabled,
-    anomalyScoreThreshold,
-    verificationDurationSeconds,
-    onCrashDetected,
-    options,
-  ]);
+  }, [enabled]);
+
+  const stopMonitoring = () => {
+    monitoringSessionRef.current += 1; // Invalidate any purely pending startMonitoring calls
+    
+    setIsMonitoring(false);
+    setLatestAnomalyScore(0);
+    
+    if (locationSubscriptionRef.current) {
+      locationSubscriptionRef.current.remove();
+      locationSubscriptionRef.current = null;
+    }
+    
+    if (accelerometerSubscriptionRef.current) {
+      accelerometerSubscriptionRef.current.remove();
+      accelerometerSubscriptionRef.current = null;
+    }
+  };
+
+  const startMonitoring = async () => {
+    // Generate unique session ID for this startup sequence
+    const sessionId = ++monitoringSessionRef.current;
+
+    const isAvailable = await Accelerometer.isAvailableAsync();
+    if (monitoringSessionRef.current !== sessionId || !isAvailable) {
+      console.warn("⚠️ [useCrashML] Accelerometer missing or session aborted");
+      return;
+    }
+
+    setIsMonitoring(true);
+    speedRef.current = 0;
+    previousMotionRef.current = GRAVITY;
+    totalSamplesRef.current = 0;
+
+    console.log(
+      `🚗 [useCrashML] Monitoring enabled | modelReady=${isCrashModelReady()}`
+    );
+
+    // Get real GPS speed updates
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        locationSubscriptionRef.current = await Location.watchPositionAsync(
+          { 
+            accuracy: Location.Accuracy.High, 
+            timeInterval: 1000, 
+            distanceInterval: 1 
+          },
+          (location) => {
+            if (location.coords.speed !== null) {
+              speedRef.current = location.coords.speed;
+            }
+          }
+        );
+      }
+    } catch (e) {
+      console.warn("⚠️ [useCrashML] Location error:", e);
+    }
+
+    if (monitoringSessionRef.current !== sessionId) {
+      // Toggled off while waiting for location permission/fetch
+      if (locationSubscriptionRef.current) {
+        locationSubscriptionRef.current.remove();
+        locationSubscriptionRef.current = null;
+      }
+      return;
+    }
+
+    Accelerometer.setUpdateInterval(SAMPLING_INTERVAL_MS);
+    const subscription = Accelerometer.addListener((reading: AccelerometerMeasurement) => {
+      const now = Date.now();
+      const dt = (now - lastUpdateRef.current) / 1000;
+      lastUpdateRef.current = now;
+
+      const { x, y, z } = reading;
+      const rawMotion = Math.sqrt(x * x + y * y + z * z) * GRAVITY;
+      
+      // Filter motion
+      const motion = previousMotionRef.current * (1 - MOTION_SMOOTHING_ALPHA) + rawMotion * MOTION_SMOOTHING_ALPHA;
+      
+      // Calculate deltaSpeed (acceleration) based on motion change
+      // Use estimated dt to handle jitter
+      const deltaSpeed = (motion - previousMotionRef.current) / (dt || 0.2);
+
+      const feature: CrashFeature = {
+        speed: speedRef.current,
+        motion,
+        deltaSpeed,
+      };
+
+      const result = feedReading(feature);
+      setLatestAnomalyScore(result.anomalyScore);
+      totalSamplesRef.current += 1;
+
+      if (result.isCrash) {
+        console.error("🚨 [useCrashML] CRASH CONFIRMED by production detector!", result);
+        onCrashDetectedRef.current();
+      }
+
+      previousMotionRef.current = motion;
+
+      // Periodic debug log
+      if (totalSamplesRef.current % 15 === 0) {
+        console.log(
+          `🚗 [useCrashML] score=${result.anomalyScore.toFixed(3)} speed=${speedRef.current.toFixed(1)} motion=${motion.toFixed(1)} status=${result.suppressedReason || 'OK'}`
+        );
+      }
+    });
+
+    // Final safety check: if we were disabled precisely when creating the listener
+    if (monitoringSessionRef.current !== sessionId) {
+      subscription.remove();
+      return;
+    }
+
+    accelerometerSubscriptionRef.current = subscription;
+  };
 
   return {
     isMonitoring,
-    isVerifying,
     latestAnomalyScore,
-    anomalyScoreHistory,
-    error,
   };
 };
+

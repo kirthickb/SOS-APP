@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import * as Speech from "expo-speech";
+
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
 import { ClientStackParamList } from "../../navigation/AppNavigator";
@@ -21,7 +21,6 @@ import apiService from "../../services/api";
 import { useVoiceSOS } from "../../hooks/useVoiceSOS";
 import { useCrashML } from "../../hooks/useCrashML";
 import { triggerAutomaticSOS } from "../../services/autoSOS";
-import voiceSOSService from "../../services/voiceSOS";
 
 type NavigationProp = NativeStackNavigationProp<ClientStackParamList>;
 
@@ -51,28 +50,6 @@ const ClientHomeScreen: React.FC = () => {
     voiceTriggerPendingRef.current = true;
 
     try {
-      Speech.speak(
-        "Voice SOS detected. Say cancel within five seconds to stop.",
-        { rate: 0.95, pitch: 1.0 }
-      );
-
-      const cancelled = await voiceSOSService.startCancelWindow(
-        [
-          "cancel",
-          "stop",
-          "abort",
-          "false alarm",
-          "don\u2019t send",
-          "do not send",
-        ],
-        5000
-      );
-
-      if (cancelled) {
-        Speech.speak("SOS cancelled.", { rate: 0.95, pitch: 1.0 });
-        return;
-      }
-
       const result = await triggerAutomaticSOS("VOICE");
       if (result.success && result.sos) {
         await setClientActiveSOS(result.sos);
@@ -95,7 +72,7 @@ const ClientHomeScreen: React.FC = () => {
   );
 
   // Use Crash ML hook
-  const { isMonitoring, isVerifying, latestAnomalyScore } = useCrashML(
+  const { isMonitoring, latestAnomalyScore } = useCrashML(
     drivingModeEnabled,
     async () => {
       console.log("🚗 [ClientHomeScreen] Crash detected");
@@ -111,7 +88,7 @@ const ClientHomeScreen: React.FC = () => {
       }
     }
   );
-
+  
   useEffect(() => {
     checkLocationPermission();
   }, []);
@@ -346,12 +323,6 @@ const ClientHomeScreen: React.FC = () => {
             thumbColor={drivingModeEnabled ? "#DC2626" : "#f4f3f4"}
           />
         </View>
-
-        {isVerifying && (
-          <Text style={styles.verifyingText}>
-            ⚠️ Anomaly detected - verifying...
-          </Text>
-        )}
       </View>
 
       {/* MAIN SOS BUTTON - Hidden if SOS already active */}

@@ -33,7 +33,7 @@ const DriverMapScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const { sosId } = route.params;
   const { markPatientPickedUp, markSOSCompleted, activeSOS } = useSOSContext();
-
+  
   const [loading, setLoading] = useState(true);
   const [driverLocation, setDriverLocation] = useState<LocationType | null>(
     null
@@ -47,18 +47,18 @@ const DriverMapScreen: React.FC = () => {
   const [sosStatus, setSOSStatus] = useState<string>("ACCEPTED");
   const [isPickedUp, setIsPickedUp] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
-
+  
   // Sync local state ONLY from activeSOS (backend truth via WebSocket)
   useEffect(() => {
     if (activeSOS && activeSOS.id === sosId) {
       console.log("📡 [DriverMap] Syncing from activeSOS:", activeSOS.status);
       setSOSStatus(activeSOS.status);
-
+      
       // Derive isPickedUp flag from backend status only
       const pickedUp =
         activeSOS.status === "ARRIVED" || activeSOS.status === "COMPLETED";
       setIsPickedUp(pickedUp);
-
+      
       if (activeSOS.latitude && activeSOS.longitude) {
         setPatientLocation({
           latitude: activeSOS.latitude,
@@ -67,7 +67,7 @@ const DriverMapScreen: React.FC = () => {
       }
     }
   }, [activeSOS, sosId]);
-
+  
   useEffect(() => {
     initializeMap();
 
@@ -263,7 +263,7 @@ const DriverMapScreen: React.FC = () => {
 
               // Call backend - DO NOT update local state
               // WebSocket will broadcast and activeSOS useEffect will update UI
-              await markPatientPickedUp(sosId);
+              await markPatientPickedUp();
 
               Alert.alert(
                 "Success",
@@ -315,7 +315,7 @@ const DriverMapScreen: React.FC = () => {
               );
 
               // Call backend - state update via WebSocket
-              await markSOSCompleted(sosId);
+              await markSOSCompleted();
 
               // WebSocket will update status to COMPLETED
               // Navigation will happen via WebSocket subscription useEffect

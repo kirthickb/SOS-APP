@@ -15,11 +15,14 @@ import ClientMapScreen from "../screens/client/ClientMapScreen";
 import DriverHomeScreen from "../screens/driver/DriverHomeScreen";
 import DriverProfileScreen from "../screens/driver/DriverProfileScreen";
 import DriverMapScreen from "../screens/driver/DriverMapScreen";
+import DebugCrashDetectionScreen from "../screens/DebugCrashDetectionScreen";
 
+// Inside client tabs:
 // Type definitions
 export type ClientTabParamList = {
   ClientHome: undefined;
   ClientProfile: undefined;
+  DebugCrash: undefined;
 };
 
 export type ClientStackParamList = {
@@ -55,6 +58,8 @@ const ClientTabNavigator: React.FC = () => {
             iconName = focused ? "home" : "home-outline";
           } else if (route.name === "ClientProfile") {
             iconName = focused ? "person" : "person-outline";
+          } else if (route.name === "DebugCrash") {
+            iconName = focused ? "flask" : "flask-outline";
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -79,6 +84,11 @@ const ClientTabNavigator: React.FC = () => {
         name="ClientProfile"
         component={ClientProfileScreen}
         options={{ title: "My Profile" }}
+      />
+      <ClientTab.Screen
+        name="DebugCrash"
+        component={DebugCrashDetectionScreen}
+        options={{ title: "Debug 🧪" }}
       />
     </ClientTab.Navigator>
   );
@@ -112,14 +122,14 @@ const ClientNavigator: React.FC = () => {
 const DriverTabNavigator: React.FC<{ navigationRef: React.RefObject<any> }> = ({
   navigationRef,
 }) => {
-  const { acceptedSOS, isLoadingActiveSOS } = useSOSContext();
+  const { activeSOS, isLoadingActiveSOS } = useSOSContext();
 
   // Navigate to map if there's an active accepted SOS
   useEffect(() => {
-    if (!isLoadingActiveSOS && acceptedSOS) {
-      navigationRef.current?.navigate("DriverMap", { sosId: acceptedSOS });
+    if (!isLoadingActiveSOS && activeSOS && ["ACCEPTED", "ARRIVED"].includes(activeSOS.status)) {
+      navigationRef.current?.navigate("DriverMap", { sosId: activeSOS.id });
     }
-  }, [acceptedSOS, isLoadingActiveSOS, navigationRef]);
+  }, [activeSOS, isLoadingActiveSOS, navigationRef]);
 
   return (
     <DriverTab.Navigator
@@ -208,8 +218,7 @@ const AppNavigator: React.FC<{ navigationRef: React.RefObject<any> }> = ({
   }, [
     userRole,
     isLoadingActiveSOS,
-    activeSOS?.id,
-    activeSOS?.status,
+    activeSOS,
     navigationRef,
   ]);
 
