@@ -78,7 +78,7 @@ const ClientTabNavigator: React.FC = () => {
       <ClientTab.Screen
         name="ClientHome"
         component={ClientHomeScreen}
-        options={{ title: "SOS Emergency" }}
+        options={{ title: "Rapid Rescue" }}
       />
       <ClientTab.Screen
         name="ClientProfile"

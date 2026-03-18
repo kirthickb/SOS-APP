@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    container_name: rapid-rescue-backend
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-1b7fb743-nishanthcoder21-9963.g.aivencloud.com:17363/defaultdb?useSSL=true&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=avnadmin
+      - SPRING_DATASOURCE_PASSWORD=AVNS_rzhglKgrkg5X-tTJCxX
+      - JWT_SECRET=U09TX0FQUF9TRUNSRVRfS0VZX0ZPUl9KV1RfVE9LRU5fR0VORVJBVE9PTl9NVVNUX0JFX0FUX0xFQVNUXzI1Nl9CSVRTX0xPTkc=
+      - PORT=8080

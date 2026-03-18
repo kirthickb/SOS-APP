@@ -2,7 +2,7 @@
 
 ## What Was Implemented
 
-Two automatic SOS triggering mechanisms have been added to your SOS Ambulance app:
+Two automatic SOS triggering mechanisms have been added to your Rapid Rescue app:
 
 ### 1. 🎤 Voice SOS
 

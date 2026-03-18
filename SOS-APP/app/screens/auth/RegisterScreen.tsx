@@ -69,8 +69,8 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Register as Client or Driver</Text>
+          <Text style={styles.title}>Rapid Rescue</Text>
+          <Text style={styles.subtitle}>Create your account</Text>
 
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Full Name</Text>

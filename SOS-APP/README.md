@@ -1,4 +1,4 @@
-# SOS Ambulance Emergency Application - Frontend
+# Rapid Rescue - Emergency Ambulance Application
 
 A production-ready React Native (Expo + TypeScript) mobile application for emergency ambulance services with real-time tracking and WebSocket-based SOS alerts.
 
@@ -179,7 +179,7 @@ Use the end-to-end checklist in `STATUS_UPDATE_FIX.md` and `TESTING_QUICK_GUIDE.
 
 ### Location permission denied
 
-- Go to device Settings → Apps → SOS App → Permissions
+- Go to device Settings → Apps → Rapid Rescue → Permissions
 - Enable Location permission
 
 ## 📞 Support

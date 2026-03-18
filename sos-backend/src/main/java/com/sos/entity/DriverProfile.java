@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "driver_profiles")
+@Table(name = "rr_driver_profiles")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

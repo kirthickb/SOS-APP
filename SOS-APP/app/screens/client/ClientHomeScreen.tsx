@@ -226,7 +226,7 @@ const ClientHomeScreen: React.FC = () => {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <Text style={styles.title}>Emergency SOS</Text>
+        <Text style={styles.title}>Rapid Rescue</Text>
         <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
           <Ionicons name="log-out-outline" size={24} color="#DC2626" />
         </TouchableOpacity>

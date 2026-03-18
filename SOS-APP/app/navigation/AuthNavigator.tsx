@@ -26,7 +26,7 @@ const AuthNavigator: React.FC = () => {
       <Stack.Screen
         name="Login"
         component={LoginScreen}
-        options={{ title: 'SOS Login' }}
+        options={{ title: 'Login to Rapid Rescue' }}
       />
       <Stack.Screen
         name="Register"

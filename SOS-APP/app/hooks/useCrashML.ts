@@ -29,11 +29,6 @@ export const useCrashML = (
   
   // Location subscription for real speed
   const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
-  // Accelerometer subscription for motion
-  const accelerometerSubscriptionRef = useRef<{ remove: () => void } | null>(null);
-  
-  // Track active monitoring session to prevent async race conditions
-  const monitoringSessionRef = useRef(0);
 
   useEffect(() => {
     onCrashDetectedRef.current = onCrashDetected;
@@ -53,8 +48,6 @@ export const useCrashML = (
   }, [enabled]);
 
   const stopMonitoring = () => {
-    monitoringSessionRef.current += 1; // Invalidate any purely pending startMonitoring calls
-    
     setIsMonitoring(false);
     setLatestAnomalyScore(0);
     
@@ -62,20 +55,12 @@ export const useCrashML = (
       locationSubscriptionRef.current.remove();
       locationSubscriptionRef.current = null;
     }
-    
-    if (accelerometerSubscriptionRef.current) {
-      accelerometerSubscriptionRef.current.remove();
-      accelerometerSubscriptionRef.current = null;
-    }
   };
 
   const startMonitoring = async () => {
-    // Generate unique session ID for this startup sequence
-    const sessionId = ++monitoringSessionRef.current;
-
     const isAvailable = await Accelerometer.isAvailableAsync();
-    if (monitoringSessionRef.current !== sessionId || !isAvailable) {
-      console.warn("⚠️ [useCrashML] Accelerometer missing or session aborted");
+    if (!isAvailable) {
+      console.warn("⚠️ [useCrashML] Accelerometer not available");
       return;
     }
 
@@ -107,15 +92,6 @@ export const useCrashML = (
       }
     } catch (e) {
       console.warn("⚠️ [useCrashML] Location error:", e);
-    }
-
-    if (monitoringSessionRef.current !== sessionId) {
-      // Toggled off while waiting for location permission/fetch
-      if (locationSubscriptionRef.current) {
-        locationSubscriptionRef.current.remove();
-        locationSubscriptionRef.current = null;
-      }
-      return;
     }
 
     Accelerometer.setUpdateInterval(SAMPLING_INTERVAL_MS);
@@ -159,13 +135,9 @@ export const useCrashML = (
       }
     });
 
-    // Final safety check: if we were disabled precisely when creating the listener
-    if (monitoringSessionRef.current !== sessionId) {
+    return () => {
       subscription.remove();
-      return;
-    }
-
-    accelerometerSubscriptionRef.current = subscription;
+    };
   };
 
   return {

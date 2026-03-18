@@ -1,16 +1,16 @@
 {
   "expo": {
-    "name": "sos-app",
-    "slug": "sos-app",
+    "name": "Rapid Rescue",
+    "slug": "rapid-rescue",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "sosapp",
+    "scheme": "rapidrescue",
     "userInterfaceStyle": "automatic",
 
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.nishanth21.sosapp",
+      "bundleIdentifier": "com.nishanth21.rapidrescue",
       "config": {
         "googleMapsApiKey": "AIzaSyAlM6ydnd7-cE7Y9YSqLoF7G4iHWk0Sl8k"
       },
@@ -23,7 +23,7 @@
     },
 
     "android": {
-      "package": "com.nishanth21.sosapp",
+      "package": "com.nishanth21.rapidrescue",
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",

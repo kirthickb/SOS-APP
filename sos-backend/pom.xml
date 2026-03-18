@@ -8,11 +8,11 @@
 		<version>4.0.1</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
-	<groupId>com.sos</groupId>
-	<artifactId>sos-backend</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
-	<name>sos-backend</name>
-	<description>Demo project for Spring Boot</description>
+	<groupId>com.rapidrescue</groupId>
+	<artifactId>rapid-rescue-backend</artifactId>
+	<version>1.0.0-SNAPSHOT</version>
+	<name>Rapid Rescue Backend</name>
+	<description>Backend for Rapid Rescue Emergency Application</description>
 	<url/>
 	<licenses>
 		<license/>

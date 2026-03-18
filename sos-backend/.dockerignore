@@ -1,0 +1,10 @@
+target/
+.git/
+.gitignore
+.gitattributes
+.mvn/wrapper/*.jar
+mvnw.cmd
+.env
+.env.example
+.vscode/
+*.md

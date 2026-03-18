@@ -35,7 +35,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     } else if (!APP_CONFIG.PHONE_PATTERN.test(phone)) {
       newErrors.phone = "Phone must be exactly 10 digits";
     }
-
+    
     if (!password) {
       newErrors.password = "Password is required";
     } else if (password.length < APP_CONFIG.MIN_PASSWORD_LENGTH) {
@@ -71,7 +71,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
-          <Text style={styles.title}>SOS Emergency</Text>
+          <Text style={styles.title}>Rapid Rescue</Text>
           <Text style={styles.subtitle}>Login to your account</Text>
 
           <View style={styles.inputContainer}>

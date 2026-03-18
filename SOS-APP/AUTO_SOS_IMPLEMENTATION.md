@@ -1,6 +1,6 @@
 # Automatic SOS Triggering Implementation
 
-This document describes the implementation of two automatic SOS triggering mechanisms for the SOS Ambulance app:
+This document describes the implementation of two automatic SOS triggering mechanisms for the Rapid Rescue app:
 
 1. **Voice-based SOS Trigger** - Detects emergency keywords via speech recognition
 2. **ML Crash Detection** - Uses Isolation Forest algorithm to detect sudden crashes

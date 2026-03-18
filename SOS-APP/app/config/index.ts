@@ -1,4 +1,4 @@
-// Configuration file for SOS App
+// Configuration file for Rapid Rescue
 // Environment variables override defaults
 
 const getEnvVar = (key: string, defaultValue: string): string => {

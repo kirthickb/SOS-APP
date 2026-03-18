@@ -1,4 +1,4 @@
-# Crash Detection Testing Guide (Mobile App)
+# Rapid Rescue - Crash Detection Testing
 
 ## Quick Start
 
