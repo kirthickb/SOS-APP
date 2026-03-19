@@ -114,7 +114,10 @@ public class SOSService {
         
         // Notify all interested parties
         messagingTemplate.convertAndSend("/topic/sos", response);
+        // Client-specific update channel (used by mobile clients)
         messagingTemplate.convertAndSend("/user/" + sosRequest.getClient().getId() + "/topic/sos", response);
+        // Keep legacy path for compatibility with any old subscribers
+        messagingTemplate.convertAndSend("/topic/users/" + sosRequest.getClient().getId() + "/sos", response);
 
         return response;
     }

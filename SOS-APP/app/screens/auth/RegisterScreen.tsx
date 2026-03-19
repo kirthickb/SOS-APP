@@ -82,7 +82,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
               editable={!loading}
             />
           </View>
-
+          
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Phone Number</Text>
             <TextInput
@@ -217,6 +217,7 @@ const styles = StyleSheet.create({
   },
   picker: {
     height: 50,
+    color:'black',
   },
   button: {
     backgroundColor: '#DC2626',

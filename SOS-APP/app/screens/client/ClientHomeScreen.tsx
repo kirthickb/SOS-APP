@@ -8,9 +8,13 @@ import {
   ActivityIndicator,
   ScrollView,
   Switch,
+  Animated,
+  Vibration,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
+import * as Haptics from "expo-haptics";
 
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
@@ -25,6 +29,12 @@ import { triggerAutomaticSOS } from "../../services/autoSOS";
 type NavigationProp = NativeStackNavigationProp<ClientStackParamList>;
 
 const ClientHomeScreen: React.FC = () => {
+  const HOLD_DURATION_MS = 5000;
+  const HOLD_HAPTIC_MS = 3000;
+  const RING_SIZE = 220;
+  const RING_STROKE = 10;
+  const RING_SEGMENTS = 40;
+
   const navigation = useNavigation<NavigationProp>();
   const { logout } = useAuth();
   const {
@@ -36,12 +46,34 @@ const ClientHomeScreen: React.FC = () => {
   } = useSOSContext();
   const [loading, setLoading] = useState(false);
   const [locationPermission, setLocationPermission] = useState(false);
+  const [isHoldingSOS, setIsHoldingSOS] = useState(false);
+  const [holdProgressValue, setHoldProgressValue] = useState(0);
 
   // Voice SOS and Crash ML states
   const [voiceSOSEnabled, setVoiceSOSEnabled] = useState(false);
   const [drivingModeEnabled, setDrivingModeEnabled] = useState(false);
   const voiceTriggerPendingRef = useRef(false);
+  const holdProgress = useRef(new Animated.Value(0)).current;
+  const holdCompletedRef = useRef(false);
+  const holdHapticTriggeredRef = useRef(false);
 
+  const triggerHoldHaptic = async () => {
+    try {
+      if (Platform.OS === "android" && Haptics.performAndroidHapticsAsync) {
+        await Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Confirm);
+      } else {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch {
+      // Fallback for devices where haptics API is unavailable or disabled.
+      if (Platform.OS === "android") {
+        Vibration.vibrate([0, 90, 45, 90]);
+      } else {
+        Vibration.vibrate(60);
+      }
+    }
+  };
+  
   const handleVoiceAutoSOS = async () => {
     if (voiceTriggerPendingRef.current) {
       return;
@@ -93,6 +125,33 @@ const ClientHomeScreen: React.FC = () => {
     checkLocationPermission();
   }, []);
 
+  useEffect(() => {
+    return () => {
+      holdProgress.stopAnimation();
+    };
+  }, [holdProgress]);
+
+  useEffect(() => {
+    const id = holdProgress.addListener(({ value }) => {
+      setHoldProgressValue(value);
+
+      // Fire a one-time haptic pulse when hold crosses 3 seconds.
+      const hapticThreshold = HOLD_HAPTIC_MS / HOLD_DURATION_MS;
+      if (
+        isHoldingSOS &&
+        !holdHapticTriggeredRef.current &&
+        value >= hapticThreshold
+      ) {
+        holdHapticTriggeredRef.current = true;
+        triggerHoldHaptic();
+      }
+    });
+
+    return () => {
+      holdProgress.removeListener(id);
+    };
+  }, [holdProgress, isHoldingSOS]);
+
   // Disable back button when SOS is active - user can only navigate away by canceling
   useEffect(() => {
     if (isSosActive) {
@@ -125,8 +184,11 @@ const ClientHomeScreen: React.FC = () => {
     }
   };
 
-  const handleSOS = async () => {
-    // Check location permission
+  const handleSOSPressIn = async () => {
+    if (loading || isHoldingSOS || isSosActive) {
+      return;
+    }
+
     if (!locationPermission) {
       Alert.alert(
         "Location Permission",
@@ -139,18 +201,35 @@ const ClientHomeScreen: React.FC = () => {
       return;
     }
 
-    Alert.alert(
-      "Send SOS Alert",
-      "Are you sure you want to send an emergency alert to nearby ambulances?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Send SOS",
-          style: "destructive",
-          onPress: sendSOS,
-        },
-      ]
-    );
+    holdCompletedRef.current = false;
+    holdHapticTriggeredRef.current = false;
+    holdProgress.setValue(0);
+    setIsHoldingSOS(true);
+
+    Animated.timing(holdProgress, {
+      toValue: 1,
+      duration: HOLD_DURATION_MS,
+      useNativeDriver: false,
+    }).start(async ({ finished }) => {
+      if (!finished || holdCompletedRef.current) {
+        return;
+      }
+
+      holdCompletedRef.current = true;
+      setIsHoldingSOS(false);
+      holdProgress.setValue(0);
+      await sendSOS();
+    });
+  };
+
+  const handleSOSPressOut = () => {
+    if (holdCompletedRef.current) {
+      return;
+    }
+
+    holdProgress.stopAnimation();
+    holdProgress.setValue(0);
+    setIsHoldingSOS(false);
   };
 
   const sendSOS = async () => {
@@ -328,9 +407,41 @@ const ClientHomeScreen: React.FC = () => {
       {/* MAIN SOS BUTTON - Hidden if SOS already active */}
       {!isSosActive && (
         <View style={styles.sosContainer}>
+          <View style={styles.sosButtonWrapper}>
+            {(isHoldingSOS || holdProgressValue > 0) && (
+              <View style={styles.sosRingContainer} pointerEvents="none">
+                {[...Array(RING_SEGMENTS)].map((_, index) => {
+                  const angle = ((index / RING_SEGMENTS) * 2 * Math.PI) -
+                    Math.PI / 2;
+                  const radius = (RING_SIZE - RING_STROKE) / 2;
+                  const x =
+                    RING_SIZE / 2 + Math.cos(angle) * radius - RING_STROKE / 2;
+                  const y =
+                    RING_SIZE / 2 + Math.sin(angle) * radius - RING_STROKE / 2;
+                  const isActive =
+                    index < Math.floor(holdProgressValue * RING_SEGMENTS);
+
+                  return (
+                    <View
+                      key={`seg-${index}`}
+                      style={[
+                        styles.ringSegment,
+                        {
+                          left: x,
+                          top: y,
+                          backgroundColor: isActive ? "#DC2626" : "#FECACA",
+                        },
+                      ]}
+                    />
+                  );
+                })}
+              </View>
+            )}
+
           <TouchableOpacity
             style={[styles.sosButton, loading && styles.sosButtonDisabled]}
-            onPress={handleSOS}
+            onPressIn={handleSOSPressIn}
+            onPressOut={handleSOSPressOut}
             disabled={loading}
             activeOpacity={0.8}
           >
@@ -344,11 +455,15 @@ const ClientHomeScreen: React.FC = () => {
               </>
             )}
           </TouchableOpacity>
+          </View>
 
           {loading && (
             <Text style={styles.searchingText}>
               Searching for ambulances...
             </Text>
+          )}
+          {!loading && (
+            <Text style={styles.holdHintText}>Press and hold SOS for 5 seconds</Text>
           )}
         </View>
       )}
@@ -566,6 +681,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginVertical: 40,
   },
+  sosButtonWrapper: {
+    width: 220,
+    height: 220,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sosRingContainer: {
+    position: "absolute",
+    width: 220,
+    height: 220,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ringSegment: {
+    position: "absolute",
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
   sosButton: {
     width: 200,
     height: 200,
@@ -597,6 +731,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
     fontStyle: "italic",
+  },
+  holdHintText: {
+    marginTop: 14,
+    color: "#991B1B",
+    fontSize: 14,
+    fontWeight: "600",
   },
   instructionsCard: {
     backgroundColor: "#fff",

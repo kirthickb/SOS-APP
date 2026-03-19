@@ -9,12 +9,12 @@ import {
   BackHandler,
 } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
-import { RouteProp, useRoute } from "@react-navigation/native";
-import { useNavigation } from "@react-navigation/native";
+import { RouteProp, useRoute, useNavigation } from "@react-navigation/native";
 import * as Location from "expo-location";
 import { ClientStackParamList } from "../../navigation/AppNavigator";
 import socketService from "../../services/socket";
 import { SOSResponse } from "../../types";
+import apiService from "../../services/api";
 import {
   getRouteCoordinates,
   calculateDistance,
@@ -42,18 +42,36 @@ const ClientMapScreen: React.FC = () => {
     latitude: number;
     longitude: number;
   } | null>(null);
+  const [displayDriverLocation, setDisplayDriverLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
   const [distance, setDistance] = useState<number | null>(null);
   const [estimatedTime, setEstimatedTime] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [followUser, setFollowUser] = useState(true);
   const mapViewRef = useRef<MapView>(null);
   const socketUnsubscribeRef = useRef<(() => void) | null>(null);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null
+  );
+  const markerAnimationRef = useRef<ReturnType<typeof setInterval> | null>(
+    null
+  );
 
   useEffect(() => {
     initializeMap();
     return () => {
       if (socketUnsubscribeRef.current) {
         socketUnsubscribeRef.current();
+      }
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      if (markerAnimationRef.current) {
+        clearInterval(markerAnimationRef.current);
+        markerAnimationRef.current = null;
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -91,6 +109,49 @@ const ClientMapScreen: React.FC = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [driverLocation, currentLocation]);
+
+  useEffect(() => {
+    if (!driverLocation) return;
+
+    if (!displayDriverLocation) {
+      setDisplayDriverLocation(driverLocation);
+      return;
+    }
+
+    if (markerAnimationRef.current) {
+      clearInterval(markerAnimationRef.current);
+      markerAnimationRef.current = null;
+    }
+
+    const start = displayDriverLocation;
+    const end = driverLocation;
+    const durationMs = 1800;
+    const stepMs = 100;
+    const steps = Math.max(1, Math.floor(durationMs / stepMs));
+    let currentStep = 0;
+
+    markerAnimationRef.current = setInterval(() => {
+      currentStep += 1;
+      const t = Math.min(1, currentStep / steps);
+
+      setDisplayDriverLocation({
+        latitude: start.latitude + (end.latitude - start.latitude) * t,
+        longitude: start.longitude + (end.longitude - start.longitude) * t,
+      });
+
+      if (t >= 1 && markerAnimationRef.current) {
+        clearInterval(markerAnimationRef.current);
+        markerAnimationRef.current = null;
+      }
+    }, stepMs);
+
+    return () => {
+      if (markerAnimationRef.current) {
+        clearInterval(markerAnimationRef.current);
+        markerAnimationRef.current = null;
+      }
+    };
+  }, [driverLocation, displayDriverLocation]);
 
   // Auto-follow user location when enabled
   const handleMapRegionChangeComplete = () => {
@@ -315,11 +376,7 @@ const ClientMapScreen: React.FC = () => {
         }
 
         // Update driver location if driver has accepted and location is available
-        if (
-          sos.acceptedDriverName &&
-          sos.driverLatitude &&
-          sos.driverLongitude
-        ) {
+        if (sos.driverLatitude != null && sos.driverLongitude != null) {
           console.log(
             "🚑 Updating driver location:",
             sos.driverLatitude,
@@ -334,6 +391,25 @@ const ClientMapScreen: React.FC = () => {
     });
   };
 
+  const syncSOSState = async () => {
+    try {
+      const latestSos = await apiService.getSOS(sosId);
+      setSosData(latestSos);
+
+      if (
+        latestSos.driverLatitude != null &&
+        latestSos.driverLongitude != null
+      ) {
+        setDriverLocation({
+          latitude: latestSos.driverLatitude,
+          longitude: latestSos.driverLongitude,
+        });
+      }
+    } catch (syncError) {
+      console.error("❌ [ClientMap] Failed to sync SOS state:", syncError);
+    }
+  };
+
   const initializeMap = async () => {
     try {
       setError(null);
@@ -341,13 +417,35 @@ const ClientMapScreen: React.FC = () => {
       // Request permission and get location first (critical for map to render)
       await getCurrentLocation();
 
+
       // Subscribe to socket updates for real-time SOS and driver location
       subscribeToDriverUpdates();
 
-      Alert.alert(
-        "SOS Request Active",
-        "Your location is being shared with nearby ambulances. Please stay calm."
-      );
+      // Fetch initial SOS data to populate driver details if already accepted
+      try {
+        const initialSos = await apiService.getSOS(sosId);
+        console.log("📋 [ClientMap] Initial SOS data:", initialSos);
+        setSosData(initialSos);
+        
+        // Update driver location if already accepted
+        if (
+          initialSos.driverLatitude != null &&
+          initialSos.driverLongitude != null
+        ) {
+          console.log("🚑 [ClientMap] Setting initial driver location");
+          setDriverLocation({
+            latitude: initialSos.driverLatitude,
+            longitude: initialSos.driverLongitude,
+          });
+        }
+
+        // Poll backend as fallback in case WebSocket updates are delayed or dropped.
+        pollingIntervalRef.current = setInterval(() => {
+          syncSOSState();
+        }, 5000);
+      } catch (sosError) {
+        console.error("❌ [ClientMap] Error fetching initial SOS:", sosError);
+      }
 
       setLoading(false);
     } catch (error) {
@@ -448,7 +546,7 @@ const ClientMapScreen: React.FC = () => {
         {/* Driver Marker (when available) */}
         {driverLocation && (
           <Marker
-            coordinate={driverLocation}
+            coordinate={displayDriverLocation || driverLocation}
             title="Ambulance"
             description={`${formatDistance(distance || 0)} away`}
             pinColor="#3B82F6"
@@ -506,7 +604,7 @@ const ClientMapScreen: React.FC = () => {
           <Text style={styles.infoText}>
             Your emergency has been successfully handled. Stay safe!
           </Text>
-        ) : sosData?.status === "ACCEPTED" ? (
+        ) : sosData?.status === "ACCEPTED" || sosData?.status === "ARRIVED" ? (
           <>
             <Text style={styles.infoText}>
               <Text style={styles.boldText}>
@@ -516,6 +614,9 @@ const ClientMapScreen: React.FC = () => {
             <Text style={styles.infoText}>
               Driver: {sosData?.acceptedDriverName || "Unknown"}
             </Text>
+            {!driverLocation && (
+              <Text style={styles.infoText}>Waiting for live ambulance location...</Text>
+            )}
           </>
         ) : !driverLocation ? (
           <>

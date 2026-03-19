@@ -70,20 +70,26 @@ class SocketService {
 
           // Subscribe to user-specific channel for private messages
           const userId = this.extractUserIdFromToken(token);
+          const handlePrivateMessage = (message: IMessage) => {
+            try {
+              const sosData: SOSResponse = JSON.parse(message.body);
+              if (API_CONFIG.ENABLE_LOGGING) {
+                console.log("📬 Received private SOS update:", sosData);
+              }
+              this.callbacks.forEach((callback) => callback(sosData));
+            } catch (error) {
+              console.error("Error parsing private SOS message:", error);
+            }
+          };
+
+          // Canonical user destination for Spring user queues
+          this.client?.subscribe("/user/topic/sos", handlePrivateMessage);
+
+          // Legacy destination support if backend publishes with explicit user id
           if (userId) {
             this.client?.subscribe(
               `/user/${userId}/topic/sos`,
-              (message: IMessage) => {
-                try {
-                  const sosData: SOSResponse = JSON.parse(message.body);
-                  if (API_CONFIG.ENABLE_LOGGING) {
-                    console.log("📬 Received private SOS update:", sosData);
-                  }
-                  this.callbacks.forEach((callback) => callback(sosData));
-                } catch (error) {
-                  console.error("Error parsing private SOS message:", error);
-                }
-              }
+              handlePrivateMessage
             );
           }
 
@@ -148,8 +154,20 @@ class SocketService {
       const parts = token.split(".");
       if (parts.length !== 3) return null;
 
-      const payload = JSON.parse(atob(parts[1]));
-      return payload.sub || payload.userId || null;
+      // Use a RN-safe base64 decoder fallback when atob is unavailable.
+      const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const decodeBase64 = (value: string): string => {
+        if (typeof atob === "function") {
+          return atob(value);
+        }
+        if (typeof Buffer !== "undefined") {
+          return Buffer.from(value, "base64").toString("utf-8");
+        }
+        throw new Error("No base64 decoder available");
+      };
+
+      const payload = JSON.parse(decodeBase64(base64));
+      return payload.userId || payload.sub || null;
     } catch (error) {
       console.error("Error extracting user ID from token:", error);
       return null;

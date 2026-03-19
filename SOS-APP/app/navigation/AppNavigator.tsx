@@ -85,11 +85,11 @@ const ClientTabNavigator: React.FC = () => {
         component={ClientProfileScreen}
         options={{ title: "My Profile" }}
       />
-      <ClientTab.Screen
+      {/* <ClientTab.Screen
         name="DebugCrash"
         component={DebugCrashDetectionScreen}
         options={{ title: "Debug 🧪" }}
-      />
+      /> */}
     </ClientTab.Navigator>
   );
 };
@@ -127,7 +127,10 @@ const DriverTabNavigator: React.FC<{ navigationRef: React.RefObject<any> }> = ({
   // Navigate to map if there's an active accepted SOS
   useEffect(() => {
     if (!isLoadingActiveSOS && activeSOS && ["ACCEPTED", "ARRIVED"].includes(activeSOS.status)) {
-      navigationRef.current?.navigate("DriverMap", { sosId: activeSOS.id });
+      const currentRoute = navigationRef.current?.getCurrentRoute();
+      if (currentRoute?.name !== "DriverMap") {
+        navigationRef.current?.navigate("DriverMap", { sosId: activeSOS.id });
+      }
     }
   }, [activeSOS, isLoadingActiveSOS, navigationRef]);
 
@@ -208,7 +211,8 @@ const AppNavigator: React.FC<{ navigationRef: React.RefObject<any> }> = ({
       activeSOS &&
       ["PENDING", "ACCEPTED", "ARRIVED"].includes(activeSOS.status)
     ) {
-      if (navigationRef.current?.reset) {
+      const currentRoute = navigationRef.current?.getCurrentRoute();
+      if (currentRoute?.name !== "ClientMap" && navigationRef.current?.reset) {
         navigationRef.current.reset({
           index: 0,
           routes: [{ name: "ClientMap", params: { sosId: activeSOS.id } }],

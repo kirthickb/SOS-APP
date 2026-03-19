@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "rapidrescue",
     "userInterfaceStyle": "automatic",
-
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.nishanth21.rapidrescue",
@@ -21,14 +20,15 @@
         "NSSpeechRecognitionUsageDescription": "This app needs speech recognition to detect emergency keywords for automatic SOS alerts."
       }
     },
-
     "android": {
       "package": "com.nishanth21.rapidrescue",
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "RECORD_AUDIO",
-        "FOREGROUND_SERVICE"
+        "FOREGROUND_SERVICE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.VIBRATE"
       ],
       "config": {
         "googleMaps": {
@@ -42,7 +42,6 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       }
     },
-
     "plugins": [
       "expo-speech-recognition",
       [
@@ -55,10 +54,14 @@
         }
       ]
     ],
-
     "experiments": {
       "reactCompiler": true,
       "newArchEnabled": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "2bc9474a-aee4-4fc0-83ae-c21733822ef4"
+      }
     }
   }
 }

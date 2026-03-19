@@ -47,6 +47,25 @@ const DriverMapScreen: React.FC = () => {
   const [sosStatus, setSOSStatus] = useState<string>("ACCEPTED");
   const [isPickedUp, setIsPickedUp] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+
+  const recalculateRouteMetrics = async (
+    source: LocationType,
+    destination: LocationType
+  ) => {
+    const route = await getRouteCoordinates(source, destination);
+    setRouteCoordinates(route);
+
+    const dist = calculateDistance(
+      source.latitude,
+      source.longitude,
+      destination.latitude,
+      destination.longitude
+    );
+    setDistance(dist);
+
+    const time = await getEstimatedTime(source, destination);
+    setEstimatedTime(time);
+  };
   
   // Sync local state ONLY from activeSOS (backend truth via WebSocket)
   useEffect(() => {
@@ -71,11 +90,19 @@ const DriverMapScreen: React.FC = () => {
   useEffect(() => {
     initializeMap();
 
-    // Update driver location every 5 seconds for real-time tracking
-    const interval = setInterval(updateDriverLocation, 5000);
+    // Update driver location every 2 seconds for smoother client tracking.
+    const interval = setInterval(updateDriverLocation, 2000);
 
     return () => clearInterval(interval);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!driverLocation || !patientLocation) return;
+
+    recalculateRouteMetrics(driverLocation, patientLocation).catch((error) => {
+      console.error("Error recalculating route:", error);
+    });
+  }, [driverLocation, patientLocation]);
 
   // Subscribe to SOS updates via WebSocket - this is the ONLY source of status updates
   useEffect(() => {
@@ -133,7 +160,7 @@ const DriverMapScreen: React.FC = () => {
       }
 
       const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
+        accuracy: Location.Accuracy.Balanced,
       });
 
       const currentLocation: LocationType = {
@@ -142,26 +169,6 @@ const DriverMapScreen: React.FC = () => {
       };
 
       setDriverLocation(currentLocation);
-
-      // Calculate route/metrics only when patient's location is known
-      if (patientLocation) {
-        const route = await getRouteCoordinates(
-          currentLocation,
-          patientLocation
-        );
-        setRouteCoordinates(route);
-
-        const dist = calculateDistance(
-          currentLocation.latitude,
-          currentLocation.longitude,
-          patientLocation.latitude,
-          patientLocation.longitude
-        );
-        setDistance(dist);
-
-        const time = await getEstimatedTime(currentLocation, patientLocation);
-        setEstimatedTime(time);
-      }
 
       setLoading(false);
     } catch (error) {
@@ -195,22 +202,6 @@ const DriverMapScreen: React.FC = () => {
         console.error("Error updating location on server:", error);
       }
 
-      // Recalculate only if patient location is available
-      if (patientLocation) {
-        const route = await getRouteCoordinates(newLocation, patientLocation);
-        setRouteCoordinates(route);
-
-        const dist = calculateDistance(
-          newLocation.latitude,
-          newLocation.longitude,
-          patientLocation.latitude,
-          patientLocation.longitude
-        );
-        setDistance(dist);
-
-        const time = await getEstimatedTime(newLocation, patientLocation);
-        setEstimatedTime(time);
-      }
     } catch (error) {
       console.error("Error updating location:", error);
     }

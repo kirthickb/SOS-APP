@@ -48,7 +48,7 @@ public class AuthService {
         
         log.info("User registered successfully: phone={}", request.getPhone());
         
-        String token = jwtUtil.generateToken(user.getPhone());
+        String token = jwtUtil.generateToken(user.getPhone(), user.getId());
         
         return AuthResponse.builder()
                 .token(token)
@@ -74,7 +74,7 @@ public class AuthService {
 
         log.info("User login successful: phone={}", request.getPhone());
         
-        String token = jwtUtil.generateToken(user.getPhone());
+        String token = jwtUtil.generateToken(user.getPhone(), user.getId());
 
         return AuthResponse.builder()
                 .token(token)
